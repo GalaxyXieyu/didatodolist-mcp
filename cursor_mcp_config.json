@@ -1,0 +1,9 @@
+{
+    "name": "didatodolist-mcp",
+    "display_name": "滴答清单",
+    "description": "滴答清单MCP服务，允许AI模型通过MCP协议操作滴答清单待办事项。",
+    "sse_url": "http://127.0.0.1:3000",
+    "enabled": true,
+    "installation_notes": "请确保已经启动了滴答清单MCP服务: DIDA_TOKEN=你的令牌 python main.py --sse --port 3000 --host 0.0.0.0",
+    "docs_url": "https://github.com/yourusername/didatodolist-mcp"
+} 

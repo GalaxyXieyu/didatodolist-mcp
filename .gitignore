@@ -1,0 +1,27 @@
+# Python缓存文件
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 数据文件
+data/*.csv
+data/backups/
+
+# 虚拟环境
+venv/
+env/
+ENV/
+
+# IDE文件
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 日志
+*.log
+nohup.out
+
+# 本地配置
+config.local.json
+config.json
