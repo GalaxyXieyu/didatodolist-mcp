@@ -20,7 +20,7 @@
 1. 克隆仓库到本地
 
 ```bash
-git clone https://github.com/galaxyxieyu/didatodolist-mcp.git
+git clone https://github.com/GalaxyXieyu/didatodolist-mcp.git
 cd didatodolist-mcp
 ```
 
