@@ -52,6 +52,50 @@ def _parse_date(date_str: Optional[str]) -> Optional[datetime]:
         except ValueError:
             return None
             
+def _format_date_for_api(date_str: Optional[str]) -> Optional[str]:
+    """
+    将'YYYY-MM-DD HH:MM:SS'格式的日期转换为API所需的'YYYY-MM-DDThh:mm:ss.000+0000'格式
+    
+    Args:
+        date_str: 'YYYY-MM-DD HH:MM:SS'格式的日期字符串
+        
+    Returns:
+        转换后的API格式日期字符串
+    """
+    if not date_str:
+        return None
+        
+    try:
+        # 解析输入的日期字符串为datetime对象（假设为本地时间）
+        local_tz = pytz.timezone('Asia/Shanghai')
+        
+        # 尝试解析不同格式
+        try:
+            # 带时间的完整格式
+            dt = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            try:
+                # 仅日期格式
+                dt = datetime.strptime(date_str, "%Y-%m-%d")
+            except ValueError:
+                # 如果已经是ISO格式，直接返回
+                if 'T' in date_str:
+                    return date_str
+                # 其他格式无法解析
+                return date_str
+        
+        # 将解析的datetime转换为本地时区的datetime
+        dt = local_tz.localize(dt)
+        
+        # 转换为UTC时间
+        utc_dt = dt.astimezone(pytz.UTC)
+        
+        # 格式化为API需要的格式：YYYY-MM-DDThh:mm:ss.000+0000
+        return utc_dt.strftime("%Y-%m-%dT%H:%M:%S.000+0000")
+    except Exception as e:
+        print(f"日期格式转换错误: {str(e)}")
+        return date_str
+            
 def _simplify_task_data(task_data: Dict[str, Any], projects_data: List[Dict[str, Any]] = None) -> Dict[str, Any]:
     """简化任务数据，保留重要字段并格式化日期"""
     # 格式化日期函数
@@ -395,7 +439,8 @@ def create_task_logic(
     start_date: Optional[str] = None,
     due_date: Optional[str] = None,
     is_all_day: Optional[bool] = None,
-    reminder: Optional[str] = None
+    reminder: Optional[str] = None,
+    kind: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     创建新任务 (逻辑部分)
@@ -449,21 +494,27 @@ def create_task_logic(
         "priority": priority,
         "projectId": project_id,
         "tags": tag_names or [],
-        "isAllDay": is_all_day
+        "isAllDay": is_all_day,
+        "reminder": reminder,
+        "status": 0,
+        "kind": kind,
     }
     
     # 处理日期和提醒
     if start_date:
-        task_data["startDate"] = start_date
+        # 转换为API所需的格式
+        task_data["startDate"] = _format_date_for_api(start_date)
         
     if due_date:
-        task_data["dueDate"] = due_date
+        # 转换为API所需的格式
+        task_data["dueDate"] = _format_date_for_api(due_date)
         
     if reminder:
         task_data["reminder"] = reminder
         
     # 移除None值的字段
     task_data = {k: v for k, v in task_data.items() if v is not None}
+    print(task_data)
     
     # 发送创建请求
     response = post("/api/v2/task", data=task_data)
@@ -553,12 +604,14 @@ def update_task_logic(
         
         # 处理日期和提醒
         if start_date is not None:
-            update_data["startDate"] = start_date
+            # 转换为API所需的格式
+            update_data["startDate"] = _format_date_for_api(start_date)
         elif 'startDate' in task:
             update_data["startDate"] = task['startDate']
             
         if due_date is not None:
-            update_data["dueDate"] = due_date
+            # 转换为API所需的格式
+            update_data["dueDate"] = _format_date_for_api(due_date)
         elif 'dueDate' in task:
             update_data["dueDate"] = task['dueDate']
             
@@ -724,8 +777,8 @@ def register_task_tools(server: FastMCP, auth_info: Dict[str, Any]):
             priority: 优先级 (0-最低, 1-低, 3-中, 5-高)
             project_name: 项目名称
             tag_names: 标签名称列表
-            start_date: 开始日期，格式 'YYYY-MM-DD HH:MM:SS'
-            due_date: 截止日期，格式 'YYYY-MM-DD HH:MM:SS'
+            start_date: 开始日期，格式 'YYYY-MM-DD HH:MM:SS'，会自动转换为API所需的时区和格式
+            due_date: 截止日期，格式 'YYYY-MM-DD HH:MM:SS'，会自动转换为API所需的时区和格式
             is_all_day: 是否为全天任务
             reminder: 提醒选项，如 "0"(准时), "-5M"(提前5分钟), "-1H"(提前1小时), "-1D"(提前1天)
             
@@ -759,8 +812,8 @@ def register_task_tools(server: FastMCP, auth_info: Dict[str, Any]):
             priority: 新优先级 (0-最低, 1-低, 3-中, 5-高)
             project_name: 新项目名称
             tag_names: 新标签名称列表
-            start_date: 新开始日期，格式 'YYYY-MM-DD HH:MM:SS'
-            due_date: 新截止日期，格式 'YYYY-MM-DD HH:MM:SS'
+            start_date: 新开始日期，格式 'YYYY-MM-DD HH:MM:SS'，会自动转换为API所需的时区和格式
+            due_date: 新截止日期，格式 'YYYY-MM-DD HH:MM:SS'，会自动转换为API所需的时区和格式
             is_all_day: 是否为全天任务
             reminder: 新提醒选项
             status: 新状态，0表示未完成，2表示已完成

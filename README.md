@@ -13,14 +13,14 @@
 ## 安装要求
 
 - Python 3.8+
-- 滴答清单账号（支持通过token或邮箱密码认证）
+- 滴答清单账号（支持通过token、手机号或邮箱进行认证）
 
 ## 安装步骤
 
 1. 克隆仓库到本地
 
 ```bash
-git clone https://github.com/yourusername/didatodolist-mcp.git
+git clone https://github.com/galaxyxieyu/didatodolist-mcp.git
 cd didatodolist-mcp
 ```
 
@@ -35,7 +35,7 @@ pip install -r requirements.txt
 服务可以通过三种方式配置认证信息：
 
 1. **配置文件**：在项目根目录创建`config.json`文件
-2. **环境变量**：设置`DIDA_TOKEN`或`DIDA_EMAIL`和`DIDA_PASSWORD`
+2. **环境变量**：设置`DIDA_TOKEN`或`DIDA_PHONE`/`DIDA_EMAIL`和`DIDA_PASSWORD`
 3. **命令行参数**：运行时通过参数提供认证信息
 
 ### 配置文件示例
@@ -43,12 +43,13 @@ pip install -r requirements.txt
 ```json
 {
   "token": "你的滴答清单访问令牌",
+  "phone": "你的手机号",
   "email": "你的滴答清单邮箱",
   "password": "你的滴答清单密码"
 }
 ```
 
-> 注意：优先使用token进行认证。如果提供邮箱和密码，系统将自动获取token并保存到配置文件中，后续无需重复登录。
+> 注意：系统优先使用token进行认证。如果提供手机号/邮箱和密码，系统将自动登录获取token并保存到配置文件中，后续将自动使用保存的token，避免频繁登录触发风控。
 
 ## 使用方法
 
@@ -64,6 +65,9 @@ python main.py
 # 使用token认证
 python main.py --token "你的滴答清单token"
 
+# 使用手机号密码认证（将获取并保存token）
+python main.py --phone "13800138000" --password "yourpassword"
+
 # 使用邮箱密码认证（将获取并保存token）
 python main.py --email "your.email@example.com" --password "yourpassword"
 
@@ -72,6 +76,9 @@ python main.py --config "custom_config.json"
 
 # 使用SSE传输方式（而非默认的stdio）
 python main.py --sse --host 127.0.0.1 --port 3000
+
+# 注意：如果密码中包含特殊字符（如!），请使用单引号括起来
+python main.py --phone "13800138000" --password 'your!password'
 ```
 
 ### 安装到Claude Desktop或其他MCP客户端
@@ -85,9 +92,10 @@ python main.py --install
 系统采用智能认证机制：
 
 1. 优先使用提供的token进行认证
-2. 如果没有token但提供了邮箱密码，系统会自动登录获取token
-3. 获取的token会保存到配置文件，后续运行时自动使用
-4. 同时保存邮箱密码到配置文件，以便token过期时自动重新获取
+2. 如果没有token但提供了手机号/邮箱和密码，系统会自动登录获取token
+3. 获取的token会与账号信息一起保存到配置文件，后续运行时自动使用保存的token
+4. 即使用户传入相同的账号密码参数，也会优先使用已保存的token，避免频繁登录触发风控
+5. 只有当传入的账号密码与配置文件中的不一致时，才会尝试使用新账号登录
 
 ## 功能模块
 
@@ -131,4 +139,4 @@ python main.py --install
 
 ## 许可证
 
-[MIT许可证](LICENSE) 
+[MIT许可证](LICENSE)

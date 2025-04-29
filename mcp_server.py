@@ -63,17 +63,17 @@ def authenticate_request(context: dict):
 def create_server(auth_info):
     """
     创建并配置MCP服务器
-    
+
     Args:
         auth_info: 认证信息字典，包含token或email/password
-        
+
     Returns:
         配置好的MCP服务器实例
     """
     # 验证认证信息
-    if not auth_info.get("token") and not (auth_info.get("email") and auth_info.get("password")):
-        raise ValueError("必须提供token或email/password进行认证")
-    
+    if not auth_info.get("token") and not ((auth_info.get("email") or auth_info.get("phone")) and auth_info.get("password")):
+        raise ValueError("必须提供token或phone/email和password进行认证")
+
     try:
         print(f"期望的 MCP API Key: {EXPECTED_API_KEY}") # 确认环境变量已加载
         # 创建MCP服务器，并直接传入 authenticate 回调
@@ -82,17 +82,17 @@ def create_server(auth_info):
             instructions="滴答清单MCP服务，允许AI模型通过MCP协议操作滴答清单待办事项。",
             authenticate=authenticate_request # <--- 在这里添加认证函数
         )
-        
+
         # 注册所有工具
         register_task_tools(server, auth_info)
         register_project_tools(server, auth_info)
         register_tag_tools(server, auth_info)
         register_analytics_tools(server, auth_info)
         register_goal_tools(server, auth_info)
-        
+
         print("滴答清单MCP服务初始化成功，并配置了认证回调。")
         return server
-        
+
     except APIError as e:
         print(f"滴答清单API认证失败: {e.message}")
         raise
@@ -105,7 +105,7 @@ def create_server(auth_info):
         raise
     except Exception as e:
         print(f"初始化MCP服务器失败: {str(e)}")
-        raise 
+        raise
 
 # --- 主程序入口 (示例) ---
 if __name__ == "__main__":
@@ -134,4 +134,4 @@ if __name__ == "__main__":
         # import uvicorn
         # uvicorn.run(mcp_server.app, host="0.0.0.0", port=3000) # 这行可能不正确
     except Exception as e:
-         print(f"启动服务器时出错: {e}") 
+         print(f"启动服务器时出错: {e}")
