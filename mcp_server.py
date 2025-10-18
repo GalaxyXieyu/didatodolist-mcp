@@ -21,6 +21,7 @@ from tools.tag_tools import register_tag_tools
 from tools.analytics_tools import register_analytics_tools
 from tools.goal_tools import register_goal_tools
 from tools.official_api import APIError, init_api
+from utils.asgi_auth import with_api_key_auth
 
 # 载入 .env（若存在）
 dotenv.load_dotenv()
@@ -74,22 +75,33 @@ def create_server(auth_info=None):
     Returns:
         配置好的MCP服务器实例
     """
-    # OAuth 优先：尝试初始化官方API（读取 oauth_config.json）。
-    # 若未配置令牌，继续启动MCP，但工具调用时将提示需要先完成 OAuth 认证。
+    # OAuth 初始化：优先从 oauth_config.json 读取，若不存在则使用 .env 覆盖
     try:
         init_api(config_path="oauth_config.json")
-        print("已通过 oauth_config.json 初始化官方API 客户端")
+        print("已初始化官方API 客户端（支持 .env 覆盖）")
     except Exception as e:
         print(f"警告：未能初始化官方API（可能尚未完成 OAuth 认证）：{e}")
 
     try:
         print(f"期望的 MCP API Key: {EXPECTED_API_KEY}") # 确认环境变量已加载
-        # 创建MCP服务器，并直接传入 authenticate 回调
-        server = FastMCP(
-            name="didatodolist-mcp",
-            instructions="滴答清单MCP服务，允许AI模型通过MCP协议操作滴答清单待办事项。",
-            authenticate=authenticate_request # <--- 在这里添加认证函数
-        )
+        # 优先尝试带鉴权参数；不支持则降级为无鉴权（本地开发场景）
+        try:
+            server = FastMCP(
+                name="didatodolist-mcp",
+                instructions="滴答清单MCP服务，允许AI模型通过MCP协议操作滴答清单待办事项。",
+                authenticate=authenticate_request
+            )
+        except TypeError as te:
+            if 'authenticate' in str(te):
+                print("当前 fastmcp 不支持 authenticate 参数，将使用 ASGI 中间件进行 Header 鉴权（SSE 路径）")
+                server = FastMCP(
+                    name="didatodolist-mcp",
+                    instructions="滴答清单MCP服务，允许AI模型通过MCP协议操作滴答清单待办事项。"
+                )
+                # 包裹 ASGI app，校验 x-api-key
+                server.app = with_api_key_auth(server.app, expected_key=EXPECTED_API_KEY, sse_path="/sse")
+            else:
+                raise
 
         # 注册所有工具（auth_info 现已不再必须）
         register_task_tools(server, auth_info or {})
@@ -98,7 +110,7 @@ def create_server(auth_info=None):
         register_analytics_tools(server, auth_info or {})
         register_goal_tools(server, auth_info or {})
 
-        print("滴答清单MCP服务初始化成功，并配置了认证回调。")
+        print("滴答清单MCP服务初始化成功。")
         return server
 
     except APIError as e:

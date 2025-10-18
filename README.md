@@ -82,58 +82,28 @@ MCP_API_KEY=your-strong-key
 - 项目接口：`docs/openapi_project.md`
 - 任务接口：`docs/openapi_task.md`
 - 数据模型定义：`docs/openapi_definitions.md`
+- 本地调试（Inspector/mcp-cli）：`docs/dev_debug_inspector.md`
 
 ---
 
-### 传统认证方式（已废弃，不推荐）
-
-服务可以通过三种方式配置认证信息：
-
-1. **配置文件**：在项目根目录创建`config.json`文件
-2. **环境变量**：设置`DIDA_TOKEN`或`DIDA_PHONE`/`DIDA_EMAIL`和`DIDA_PASSWORD`
-3. **命令行参数**：运行时通过参数提供认证信息
-
-### 配置文件示例
-
-```json
-{
-  "token": "你的滴答清单访问令牌",
-  "phone": "你的手机号",
-  "email": "你的滴答清单邮箱",
-  "password": "你的滴答清单密码"
-}
-```
-
-> 注意：系统优先使用token进行认证。如果提供手机号/邮箱和密码，系统将自动登录获取token并保存到配置文件中，后续将自动使用保存的token，避免频繁登录触发风控。
-
 ## 使用方法
 
-### 基本使用
+### 启动（stdio）
 
 ```bash
 python main.py
 ```
 
-### 使用命令行参数
+### 启动（SSE，推荐调试）
 
 ```bash
-# 使用token认证
-python main.py --token "你的滴答清单token"
-
-# 使用手机号密码认证（将获取并保存token）
-python main.py --phone "13800138000" --password "yourpassword"
-
-# 使用邮箱密码认证（将获取并保存token）
-python main.py --email "your.email@example.com" --password "yourpassword"
-
-# 指定配置文件路径（默认 oauth_config.json）
-python main.py --config "oauth_config.json"
-
-# 使用SSE传输方式（而非默认的stdio）
 python main.py --sse --host 127.0.0.1 --port 3000
+```
 
-# 注意：如果密码中包含特殊字符（如!），请使用单引号括起来
-python main.py --phone "13800138000" --password 'your!password'
+### 指定配置文件路径（使用 oauth_config.json 时）
+
+```bash
+python main.py --config "oauth_config.json"
 ```
 
 ### 安装到 MCP 客户端
@@ -160,11 +130,11 @@ python main.py --sse --host 127.0.0.1 --port 3000
 # 客户端请求头：x-api-key: your-strong-key
 ```
 
-## 端口与鉴权
+## 端口与鉴权（摘要）
 
-- 回调端口：38000（oauth 回调一次性使用，与 `redirect_uri` 对齐）
+- 回调端口：38000（OAuth 回调一次性使用，与 `redirect_uri` 对齐）
 - 服务端口：3000（SSE 连接 MCP 服务）
-- 鉴权：客户端连接时必须携带 `x-api-key`，服务端验证 `MCP_API_KEY`
+- 鉴权：客户端连接时需携带 `x-api-key`，服务端校验 `MCP_API_KEY`
 
 ## 认证机制
 

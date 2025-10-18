@@ -149,11 +149,17 @@ class DidaAdapter:
         支持基于 status/completedTime 的本地 completed 过滤。
         """
         tasks: List[Dict[str, Any]] = []
+        # 获取项目映射，便于补齐任务中的 projectName 与 projectId
+        all_projects: List[Dict[str, Any]] = self.list_projects()
+        proj_name_map = {p.get('id'): p.get('name') for p in all_projects if p.get('id')}
+
+        # 需要遍历的项目集合
         projects: List[Dict[str, Any]]
         if project_id:
-            projects = [{"id": project_id}]
+            # 仍然使用完整映射补齐名称
+            projects = [{"id": project_id, "name": proj_name_map.get(project_id)}]
         else:
-            projects = self.list_projects()
+            projects = all_projects
         for p in projects:
             pid = p.get('id')
             if not pid:
@@ -165,6 +171,11 @@ class DidaAdapter:
             for t in raw:
                 t = self.normalize_task_status(t)
                 t = self.normalize_task_datetimes(t)
+                # 补齐 projectId 与 projectName
+                if not t.get('projectId'):
+                    t['projectId'] = pid
+                if not t.get('projectName'):
+                    t['projectName'] = proj_name_map.get(pid)
                 tasks.append(t)
         if completed is not None:
             tasks = [t for t in tasks if bool(t.get('isCompleted', False)) == completed]
