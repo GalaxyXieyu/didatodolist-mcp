@@ -45,14 +45,21 @@ pip install -r requirements.txt
 - 方式 A（配置文件）：复制 `oauth_config.json.example` 为 `oauth_config.json`，填入开放平台的 `client_id`、`client_secret`；执行 `python scripts/oauth_authenticate.py --port 38000` 完成一次性授权并写入 `access_token`。
 - 方式 B（环境变量配合 .env）：在 `.env` 中配置 `MCP_API_KEY=...`、可选的 `DIDA_CLIENT_ID`、`DIDA_CLIENT_SECRET`、`DIDA_ACCESS_TOKEN`、`DIDA_REFRESH_TOKEN`（会覆盖配置文件）；客户端通过请求头 `x-api-key` 连接。
 
-最小可用步骤：
+最小可用步骤（两种任选其一）：
 
 ```bash
+# A) 配置文件方式
 cp oauth_config.json.example oauth_config.json
-# 编辑 oauth_config.json，填入 client_id/client_secret，redirect_uri 默认 http://localhost:38000/callback
-python scripts/oauth_authenticate.py --port 38000
+# 编辑 oauth_config.json，填入 client_id/client_secret
+python scripts/oauth_authenticate.py --port 38000  # 生成 access_token 到 oauth_config.json
 
-export MCP_API_KEY=your-strong-key
+# B) 仅用 .env 方式
+cp .env.example .env
+# 编辑 .env，至少填写 MCP_API_KEY、DIDA_CLIENT_ID、DIDA_CLIENT_SECRET
+python scripts/oauth_authenticate.py --port 38000  # 成功后写入 DIDA_ACCESS_TOKEN/DIDA_REFRESH_TOKEN 到 .env
+
+# 启动服务（两种方式任何一种完成后即可）
+export MCP_API_KEY=your-strong-key  # 或直接在 .env 中配置
 python main.py --sse --host 127.0.0.1 --port 3000
 # 客户端请求头需带：x-api-key: your-strong-key
 ```
