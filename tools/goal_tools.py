@@ -20,7 +20,7 @@ from .task_tools import (
     update_task_logic,
     delete_task_logic
 )
-from .base_api import put # 需要 put 来更新任务描述
+# 目标更新走 update_task_logic，无需直接HTTP调用
 
 # 导入辅助函数
 from utils.date.date_utils import is_valid_date, format_datetime, get_current_time

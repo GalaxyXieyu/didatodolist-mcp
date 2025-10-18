@@ -6,7 +6,7 @@ from typing import Dict, List, Optional, Any, Union
 from datetime import datetime, timedelta
 import pytz
 from fastmcp import FastMCP
-from .base_api import APIError, init_api, get, post, put, delete
+from .adapter import adapter, APIError
 
 # --- 模块级辅助函数 ---
 
@@ -162,31 +162,8 @@ def _simplify_task_data(task_data: Dict[str, Any], projects_data: List[Dict[str,
     return simplified
 
 def _get_completed_tasks_info_logic() -> Dict[str, Any]:
-    """获取所有项目中的已完成任务信息 (逻辑部分)"""
-    completed_tasks_info = {}
-    # 获取所有项目
-    projects = get("/api/v2/batch/check/0").get('projectProfiles', [])
-    for project in projects:
-        project_id = project['id']
-        try:
-            # 获取项目中的已完成任务
-            completed_tasks = get(f"/api/v2/project/{project_id}/completed/")
-            for task in completed_tasks:
-                # 使用创建者+标题作为键
-                key = f"{task.get('creator')}_{task.get('title')}"
-                # 标记为已完成
-                task['status'] = 2
-                task['isCompleted'] = True
-                # 确保有完成时间字段
-                if not task.get('completedTime'):
-                    task['completedTime'] = task.get('modifiedTime')
-                # 确保有完成用户ID字段
-                if not task.get('completedUserId'):
-                    task['completedUserId'] = task.get('creator')
-                completed_tasks_info[key] = task
-        except Exception as e:
-            print(f"获取项目 {project_id} 的已完成任务时出错: {str(e)}")
-    return completed_tasks_info
+    """(已废弃路径) 兼容占位：官方API不提供旧批量接口，返回空。"""
+    return {}
 
 def _update_column_info_logic(projects: List[Dict[str, Any]], completed_columns_set: set):
     """更新栏目信息，识别已完成状态的栏目 (逻辑部分)"""
@@ -227,17 +204,30 @@ def _merge_tag_info_logic(task_data: Dict[str, Any], tags: List[Dict[str, Any]])
 def _get_all_tasks_logic() -> tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]:
     """获取所有任务，包括已完成和未完成的任务，并合并相关信息 (逻辑部分)"""
     global _completed_columns
-    # 获取所有基础数据
-    response = get("/api/v2/batch/check/0")
-    tasks_data = response.get('syncTaskBean', {}).get('update', [])
-    projects_data = response.get('projectProfiles', [])
-    tags_data = response.get('tags', [])
+    # 使用官方接口获取项目与任务
+    projects_data = []
+    try:
+        projects_data = adapter.list_projects()
+    except Exception:
+        projects_data = []
+
+    # 官方任务接口通常需要分别获取未完成/已完成，视文档具体筛选实现
+    tasks_data: List[Dict[str, Any]] = []
+    tags_data: List[Dict[str, Any]] = []  # 若官方没有标签API，则保留空集合
+    try:
+        # 遍历项目聚合任务（官方无全局列表端点）
+        incomplete = adapter.list_tasks(completed=False)
+        complete = adapter.list_tasks(completed=True)
+        tasks_data = (incomplete or []) + (complete or [])
+    except Exception as e:
+        print(f"获取任务列表失败: {e}")
+        tasks_data = []
     
     # 更新栏目信息 (使用全局变量)
     _update_column_info_logic(projects_data, _completed_columns)
     
-    # 获取已完成任务信息
-    completed_tasks_info = _get_completed_tasks_info_logic()
+    # 旧逻辑依赖批量端点合并“已完成”，现在已通过 adapter 分开获取，这里置空
+    completed_tasks_info = {}
     
     # 处理所有任务（未完成+已完成）
     all_tasks = []
@@ -254,43 +244,11 @@ def _get_all_tasks_logic() -> tuple[List[Dict[str, Any]], List[Dict[str, Any]], 
         
         # 检查是否在已完成任务列表中
         key = f"{task.get('creator')}_{task.get('title')}"
-        if key in completed_tasks_info:
-            completed_task = completed_tasks_info[key]
-            # 保留原始字段
-            original_fields = {
-                'id': task.get('id'),
-                'projectId': task.get('projectId'),
-                'columnId': task.get('columnId'),
-                'sortOrder': task.get('sortOrder'),
-                'tags': task.get('tags', []),
-                'tagDetails': task.get('tagDetails', [])
-            }
-            # 更新任务信息
-            task.update(completed_task)
-            # 恢复原始字段
-            task.update(original_fields)
-            task['isCompleted'] = True
-        else:
-            task['isCompleted'] = False
-            # 如果状态为2但不在已完成列表中，重置状态
-            if task.get('status') == 2:
-                task['status'] = 0
+        # adapter.normalize_task_status 已处理 isCompleted/status，这里不再强制覆盖
         
         all_tasks.append(task)
     
-    # 添加仅在已完成任务列表中的任务
-    for key, completed_task in completed_tasks_info.items():
-        # 检查是否已经在processed_tasks中
-        task_id = completed_task.get('id')
-        # 检查是否已添加到处理列表
-        if not any(task.get('id') == task_id for task in all_tasks):
-            # 合并项目和标签信息
-            completed_task = _merge_project_info_logic(completed_task, projects_data)
-            completed_task = _merge_tag_info_logic(completed_task, tags_data)
-            # 确保isCompleted标记
-            completed_task['isCompleted'] = True
-            # 添加到处理列表
-            all_tasks.append(completed_task)
+    # 不再需要从已完成任务列表补充，adapter 已统一返回
     
     return all_tasks, projects_data, tags_data
 
@@ -440,7 +398,15 @@ def create_task_logic(
     due_date: Optional[str] = None,
     is_all_day: Optional[bool] = None,
     reminder: Optional[str] = None,
-    kind: Optional[str] = None
+    kind: Optional[str] = None,
+    # 官方字段（新增）
+    project_id: Optional[str] = None,
+    desc: Optional[str] = None,
+    time_zone: Optional[str] = None,
+    reminders: Optional[List[str]] = None,
+    repeat_flag: Optional[str] = None,
+    sort_order: Optional[int] = None,
+    items: Optional[List[Dict[str, Any]]] = None
 ) -> Dict[str, Any]:
     """
     创建新任务 (逻辑部分)
@@ -459,32 +425,31 @@ def create_task_logic(
     Returns:
         创建的任务信息
     """
-    project_id = None
-    # 获取所有项目
-    projects_data = get("/api/v2/batch/check/0").get('projectProfiles', [])
+    resolved_project_id = project_id
+    projects_data = adapter.list_projects()
     
-    if project_name:
+    if not resolved_project_id and project_name:
         # 尝试精确匹配
         for project in projects_data:
             if project.get('name') == project_name:
-                project_id = project.get('id')
+                resolved_project_id = project.get('id')
                 break
                 
         # 如果精确匹配失败，尝试不区分大小写的匹配
-        if not project_id and project_name:
+        if not resolved_project_id and project_name:
             project_name_lower = project_name.lower()
             for project in projects_data:
                 if project.get('name', '').lower() == project_name_lower:
                     print("不区分大小写匹配到项目：", project.get('name'))
-                    project_id = project.get('id')
+                    resolved_project_id = project.get('id')
                     break
         
         # 如果仍然失败，尝试部分匹配
-        if not project_id and project_name:
+        if not resolved_project_id and project_name:
             for project in projects_data:
                 if project_name.lower() in project.get('name', '').lower() or project.get('name', '').lower() in project_name.lower():
                     print("部分匹配到项目：", project.get('name'))
-                    project_id = project.get('id')
+                    resolved_project_id = project.get('id')
                     break
     
     # 准备任务数据
@@ -492,12 +457,20 @@ def create_task_logic(
         "title": title,
         "content": content,
         "priority": priority,
-        "projectId": project_id,
-        "tags": tag_names or [],
+        "projectId": resolved_project_id,
+        # 官方任务未公开 tags 字段，保留为兼容逻辑但不强制发送
+        # "tags": tag_names or [],
         "isAllDay": is_all_day,
         "reminder": reminder,
         "status": 0,
         "kind": kind,
+        # 官方字段
+        "desc": desc,
+        "timeZone": time_zone,
+        "reminders": reminders,
+        "repeatFlag": repeat_flag,
+        "sortOrder": sort_order,
+        "items": items,
     }
     
     # 处理日期和提醒
@@ -517,7 +490,7 @@ def create_task_logic(
     print(task_data)
     
     # 发送创建请求
-    response = post("/api/v2/task", data=task_data)
+    response = adapter.create_task(task_data)
     
     # 返回简化后的响应，同时传递项目数据
     return _simplify_task_data(response, projects_data)
@@ -533,7 +506,15 @@ def update_task_logic(
     due_date: Optional[str] = None,
     is_all_day: Optional[bool] = None,
     reminder: Optional[str] = None,
-    status: Optional[int] = None
+    status: Optional[int] = None,
+    # 官方字段（新增）
+    project_id: Optional[str] = None,
+    desc: Optional[str] = None,
+    time_zone: Optional[str] = None,
+    reminders: Optional[List[str]] = None,
+    repeat_flag: Optional[str] = None,
+    sort_order: Optional[int] = None,
+    items: Optional[List[Dict[str, Any]]] = None
 ) -> Dict[str, Any]:
     """
     更新任务 (逻辑部分)
@@ -583,8 +564,8 @@ def update_task_logic(
         task_id = task.get('id')
         
         # 查找项目ID（如果指定了项目名称）
-        project_id = task.get('projectId')
-        if project_name:
+        project_id = project_id or task.get('projectId')
+        if project_name and not project_id:
             for project in projects_data:
                 if project.get('name') == project_name:
                     project_id = project.get('id')
@@ -597,9 +578,16 @@ def update_task_logic(
             "content": content if content is not None else task.get('content'),
             "priority": priority if priority is not None else task.get('priority'),
             "projectId": project_id,
-            "tags": tag_names if tag_names is not None else task.get('tags', []),
+            # 官方未公开 tags 写入，去除发送
             "isAllDay": is_all_day if is_all_day is not None else task.get('isAllDay'),
             "status": status if status is not None else task.get('status'),
+            # 官方字段
+            "desc": desc if desc is not None else task.get('desc'),
+            "timeZone": time_zone if time_zone is not None else task.get('timeZone'),
+            "reminders": reminders if reminders is not None else task.get('reminders'),
+            "repeatFlag": repeat_flag if repeat_flag is not None else task.get('repeatFlag'),
+            "sortOrder": sort_order if sort_order is not None else task.get('sortOrder'),
+            "items": items if items is not None else task.get('items'),
         }
         
         # 处理日期和提醒
@@ -622,9 +610,52 @@ def update_task_logic(
             
         # 移除None值的字段
         update_data = {k: v for k, v in update_data.items() if v is not None}
-        # 发送更新请求
+
+        # 状态变更：对齐官方逻辑（仅支持完成）
+        if status is not None:
+            if status == 2:
+                if not project_id:
+                    return {
+                        "success": False,
+                        "info": "完成任务失败：缺少 projectId",
+                        "data": None
+                    }
+                try:
+                    adapter.complete_task(project_id, task_id)
+                    # 完成后刷新一次该项目任务，返回最新数据
+                    refreshed = adapter.list_tasks(project_id=project_id)
+                    fresh = next((t for t in refreshed if t.get('id') == task_id), None)
+                    if fresh:
+                        return {
+                            "success": True,
+                            "info": "任务已完成",
+                            "data": _simplify_task_data(fresh, projects_data)
+                        }
+                except Exception as e:
+                    return {
+                        "success": False,
+                        "info": f"完成任务失败: {e}",
+                        "data": None
+                    }
+                # 若无法刷新，基于原任务构造完成态返回
+                task_after = dict(task)
+                task_after['status'] = 2
+                task_after['isCompleted'] = True
+                return {
+                    "success": True,
+                    "info": "任务已完成",
+                    "data": _simplify_task_data(task_after, projects_data)
+                }
+            elif status == 0:
+                return {
+                    "success": False,
+                    "info": "取消完成未在官方开放API中提供，暂不支持",
+                    "data": None
+                }
+
+        # 非状态变更：走常规更新
         print(f"更新数据: {update_data}")
-        response = put(f"/api/v2/task/{task_id}", data=update_data)
+        response = adapter.update_task(task_id, update_data)
         
         # 返回更新结果
         return {
@@ -678,22 +709,9 @@ def delete_task_logic(task_id_or_title: str) -> Dict[str, Any]:
         task_id = task.get('id')
         project_id = task.get('projectId')
         
-        # 准备删除数据
-        delete_data = {
-            "add": [],
-            "addAttachments": [],
-            "delete": [
-                {
-                    "taskId": task_id,
-                    "projectId": project_id
-                }
-            ],
-            "deleteAttachments": [],
-            "update": []
-        }
-        
         # 发送删除请求
-        post("/api/v2/batch/task", data=delete_data)
+        # 官方删除需要 projectId
+        adapter.delete_task(project_id, task_id)
         
         # 返回删除结果
         return {
@@ -711,6 +729,63 @@ def delete_task_logic(task_id_or_title: str) -> Dict[str, Any]:
         }
 
 
+def complete_task_logic(task_id_or_title: str) -> Dict[str, Any]:
+    """
+    完成任务（调用官方 complete 接口）
+    
+    Args:
+        task_id_or_title: 任务ID或任务标题
+    Returns:
+        操作结果字典
+    """
+    try:
+        all_tasks, projects_data, _ = _get_all_tasks_logic()
+        task = None
+        for t in all_tasks:
+            if t.get('id') == task_id_or_title or t.get('title') == task_id_or_title:
+                task = t
+                break
+        if not task:
+            return {
+                "success": False,
+                "info": f"未找到ID或标题为 '{task_id_or_title}' 的任务",
+                "data": None
+            }
+        task_id = task.get('id')
+        project_id = task.get('projectId')
+        if not project_id:
+            return {
+                "success": False,
+                "info": "完成任务失败：缺少 projectId",
+                "data": None
+            }
+        adapter.complete_task(project_id, task_id)
+        # 刷新该项目任务，返回最新数据
+        refreshed = adapter.list_tasks(project_id=project_id)
+        fresh = next((t for t in refreshed if t.get('id') == task_id), None)
+        if fresh:
+            return {
+                "success": True,
+                "info": "任务已完成",
+                "data": _simplify_task_data(fresh, projects_data)
+            }
+        # 无法刷新则回退构造
+        task_after = dict(task)
+        task_after['status'] = 2
+        task_after['isCompleted'] = True
+        return {
+            "success": True,
+            "info": "任务已完成",
+            "data": _simplify_task_data(task_after, projects_data)
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "info": f"完成任务失败: {e}",
+            "data": None
+        }
+
+
 # --- MCP工具注册 ---
 
 def register_task_tools(server: FastMCP, auth_info: Dict[str, Any]):
@@ -721,15 +796,7 @@ def register_task_tools(server: FastMCP, auth_info: Dict[str, Any]):
         server: MCP服务器实例
         auth_info: 认证信息字典，包含token或email/password
     """
-    # 初始化API (仅需一次)
-    auth_info_with_debug = auth_info.copy()
-    auth_info_with_debug['debug'] = True # 启用调试模式
-    try:
-        init_api(**auth_info_with_debug)
-    except Exception as e:
-        print(f"API 初始化失败: {e}")
-        # 根据需要决定是否抛出异常或继续
-        # raise
+    # 适配层按需初始化，无需在此显式初始化
     
     @server.tool()
     def get_tasks(
@@ -765,7 +832,15 @@ def register_task_tools(server: FastMCP, auth_info: Dict[str, Any]):
         start_date: Optional[str] = None,
         due_date: Optional[str] = None,
         is_all_day: Optional[bool] = None,
-        reminder: Optional[str] = None
+        reminder: Optional[str] = None,
+        # 官方字段（新增）
+        project_id: Optional[str] = None,
+        desc: Optional[str] = None,
+        time_zone: Optional[str] = None,
+        reminders: Optional[List[str]] = None,
+        repeat_flag: Optional[str] = None,
+        sort_order: Optional[int] = None,
+        items: Optional[List[Dict[str, Any]]] = None
     ) -> Dict[str, Any]:
         """
         创建新任务
@@ -785,7 +860,7 @@ def register_task_tools(server: FastMCP, auth_info: Dict[str, Any]):
         Returns:
             创建的任务信息
         """
-        return create_task_logic(title=title, content=content, priority=priority, project_name=project_name, tag_names=tag_names, start_date=start_date, due_date=due_date, is_all_day=is_all_day, reminder=reminder)
+        return create_task_logic(title=title, content=content, priority=priority, project_name=project_name, tag_names=tag_names, start_date=start_date, due_date=due_date, is_all_day=is_all_day, reminder=reminder, project_id=project_id, desc=desc, time_zone=time_zone, reminders=reminders, repeat_flag=repeat_flag, sort_order=sort_order, items=items)
     
     @server.tool()
     def update_task(
@@ -837,12 +912,24 @@ def register_task_tools(server: FastMCP, auth_info: Dict[str, Any]):
         """
         return delete_task_logic(task_id_or_title=task_id_or_title)
 
+    @server.tool()
+    def complete_task(task_id_or_title: str) -> Dict[str, Any]:
+        """
+        完成任务（官方：POST /open/v1/project/{projectId}/task/{taskId}/complete）
+        Args:
+            task_id_or_title: 任务ID或任务标题
+        Returns:
+            操作结果
+        """
+        return complete_task_logic(task_id_or_title)
+
 # 导出可供外部引用的函数
 __all__ = [
     'get_tasks_logic', 
     'create_task_logic', 
     'update_task_logic', 
     'delete_task_logic', 
+    'complete_task_logic',
     'register_task_tools',
     '_get_all_tasks_logic' # 如果需要外部访问
 ] 

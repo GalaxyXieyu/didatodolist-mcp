@@ -2,6 +2,14 @@
 
 滴答清单MCP（Memory-Context-Planning）服务是一个基于Python的后端服务，为用户提供目标管理、任务统计分析、关键词提取和任务-目标匹配等功能。该服务作为滴答清单主应用的辅助功能，帮助用户更好地规划和跟踪个人及团队目标完成情况。
 
+> 最新更新：已从逆向接口切换到官方 OAuth 2.0 + Open API。详见 `docs/openapi_oauth_guide.md`。
+
+> 重要：本项目已全面对齐滴答清单开放平台（/open/v1）端点。
+> - 项目：GET/POST/POST(id)/DELETE /open/v1/project
+> - 任务：POST /open/v1/task，POST /open/v1/task/{taskId}，POST 完成 /open/v1/project/{projectId}/task/{taskId}/complete，DELETE /open/v1/project/{projectId}/task/{taskId}
+> - 汇总任务：官方无全局任务列表，使用 GET /open/v1/project/{projectId}/data 聚合
+> - 标签：暂无写接口，当前工具仅提供只读聚合视图
+
 ## 主要功能
 
 - **目标管理**：创建、查询、更新和删除个人目标
@@ -15,22 +23,50 @@
 - Python 3.8+
 - 滴答清单账号（支持通过token、手机号或邮箱进行认证）
 
-## 安装步骤
+## 快速开始
 
-1. 克隆仓库到本地
+1) 克隆项目
 
 ```bash
 git clone https://github.com/GalaxyXieyu/didatodolist-mcp.git
 cd didatodolist-mcp
 ```
 
-2. 安装依赖
+2) 安装依赖
 
 ```bash
 pip install -r requirements.txt
 ```
 
-## 配置
+3) 配置与认证
+
+推荐使用 OAuth 2.0：
+
+- 方式 A（配置文件）：复制 `oauth_config.json.example` 为 `oauth_config.json`，填入开放平台的 `client_id`、`client_secret`；执行 `python scripts/oauth_authenticate.py --port 38000` 完成一次性授权并写入 `access_token`。
+- 方式 B（环境变量）：在 `.env` 中设置 `MCP_API_KEY=xxx`；启动服务时客户端通过请求头 `x-api-key` 连接。
+
+最小可用步骤：
+
+```bash
+cp oauth_config.json.example oauth_config.json
+# 编辑 oauth_config.json，填入 client_id/client_secret，redirect_uri 默认 http://localhost:38000/callback
+python scripts/oauth_authenticate.py --port 38000
+
+export MCP_API_KEY=your-strong-key
+python main.py --sse --host 127.0.0.1 --port 3000
+# 客户端请求头需带：x-api-key: your-strong-key
+```
+
+更多文档：
+- 统一 OAuth 指南：`docs/openapi_oauth_guide.md`
+- 文档索引：`docs/openapi_index.md`
+- 项目接口：`docs/openapi_project.md`
+- 任务接口：`docs/openapi_task.md`
+- 数据模型定义：`docs/openapi_definitions.md`
+
+---
+
+### 传统认证方式（已废弃，不推荐）
 
 服务可以通过三种方式配置认证信息：
 
@@ -71,8 +107,8 @@ python main.py --phone "13800138000" --password "yourpassword"
 # 使用邮箱密码认证（将获取并保存token）
 python main.py --email "your.email@example.com" --password "yourpassword"
 
-# 指定配置文件路径
-python main.py --config "custom_config.json"
+# 指定配置文件路径（默认 oauth_config.json）
+python main.py --config "oauth_config.json"
 
 # 使用SSE传输方式（而非默认的stdio）
 python main.py --sse --host 127.0.0.1 --port 3000
@@ -81,11 +117,35 @@ python main.py --sse --host 127.0.0.1 --port 3000
 python main.py --phone "13800138000" --password 'your!password'
 ```
 
-### 安装到Claude Desktop或其他MCP客户端
+### 安装到 MCP 客户端
 
 ```bash
 python main.py --install
 ```
+
+## 端口与鉴权
+
+- 回调端口（一次性授权）：`38000`
+  - 与 `oauth_config.json` 的 `redirect_uri` 对齐，例如 `http://localhost:38000/callback`
+  - 仅在运行 `scripts/oauth_authenticate.py` 进行 OAuth 授权时临时监听
+
+- MCP 服务端口（SSE）：`3000`
+  - 通过 `python main.py --sse --host 127.0.0.1 --port 3000` 启动
+  - 客户端连接 MCP 时请在请求头携带 `x-api-key`
+
+示例：
+
+```bash
+export MCP_API_KEY="your-strong-key"
+python main.py --sse --host 127.0.0.1 --port 3000
+# 客户端请求头：x-api-key: your-strong-key
+```
+
+## 端口与鉴权
+
+- 回调端口：38000（oauth 回调一次性使用，与 `redirect_uri` 对齐）
+- 服务端口：3000（SSE 连接 MCP 服务）
+- 鉴权：客户端连接时必须携带 `x-api-key`，服务端验证 `MCP_API_KEY`
 
 ## 认证机制
 

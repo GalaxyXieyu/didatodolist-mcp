@@ -19,7 +19,7 @@ from tools.project_tools import register_project_tools
 from tools.tag_tools import register_tag_tools
 from tools.analytics_tools import register_analytics_tools
 from tools.goal_tools import register_goal_tools
-from tools.base_api import APIError
+from tools.official_api import APIError, init_api
 
 # --- 鉴权逻辑 ---
 EXPECTED_API_KEY = os.environ.get("MCP_API_KEY", "123") # 从环境变量获取，默认'123'
@@ -60,7 +60,7 @@ def authenticate_request(context: dict):
     }
 
 
-def create_server(auth_info):
+def create_server(auth_info=None):
     """
     创建并配置MCP服务器
 
@@ -70,9 +70,13 @@ def create_server(auth_info):
     Returns:
         配置好的MCP服务器实例
     """
-    # 验证认证信息
-    if not auth_info.get("token") and not ((auth_info.get("email") or auth_info.get("phone")) and auth_info.get("password")):
-        raise ValueError("必须提供token或phone/email和password进行认证")
+    # OAuth 优先：尝试初始化官方API（读取 oauth_config.json）。
+    # 若未配置令牌，继续启动MCP，但工具调用时将提示需要先完成 OAuth 认证。
+    try:
+        init_api(config_path="oauth_config.json")
+        print("已通过 oauth_config.json 初始化官方API 客户端")
+    except Exception as e:
+        print(f"警告：未能初始化官方API（可能尚未完成 OAuth 认证）：{e}")
 
     try:
         print(f"期望的 MCP API Key: {EXPECTED_API_KEY}") # 确认环境变量已加载
@@ -83,12 +87,12 @@ def create_server(auth_info):
             authenticate=authenticate_request # <--- 在这里添加认证函数
         )
 
-        # 注册所有工具
-        register_task_tools(server, auth_info)
-        register_project_tools(server, auth_info)
-        register_tag_tools(server, auth_info)
-        register_analytics_tools(server, auth_info)
-        register_goal_tools(server, auth_info)
+        # 注册所有工具（auth_info 现已不再必须）
+        register_task_tools(server, auth_info or {})
+        register_project_tools(server, auth_info or {})
+        register_tag_tools(server, auth_info or {})
+        register_analytics_tools(server, auth_info or {})
+        register_goal_tools(server, auth_info or {})
 
         print("滴答清单MCP服务初始化成功，并配置了认证回调。")
         return server

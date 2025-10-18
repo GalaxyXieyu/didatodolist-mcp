@@ -4,7 +4,7 @@
 
 from typing import Dict, List, Optional, Any
 from fastmcp import FastMCP
-from .base_api import APIError, init_api, get, post, put, delete
+from .adapter import adapter, APIError
 
 # --- 模块级核心逻辑函数 ---
 
@@ -15,31 +15,19 @@ def get_projects_logic() -> List[Dict[str, Any]]:
     Returns:
         项目列表 (包含 id, name, color, sortOrder, sortType, modifiedTime)
     """
-    response = get("/api/v2/batch/check/0")
-    projects_data = response.get('projectProfiles', [])
-    
-    # 转换为更有用的格式
-    result = []
-    for project in projects_data:
-        project_data = {
-            "id": project.get("id"),
-            "name": project.get("name"),
-            "color": project.get("color"),
-            "sortOrder": project.get("sortOrder"),
-            "sortType": project.get("sortType"),
-            "modifiedTime": project.get("modifiedTime"),
-            # 考虑是否需要添加 'description' 或 'isArchived' 等字段
-            "description": project.get("description", None), # 假设 API 可能返回描述
-            "isArchived": project.get("isArchived", False) # 假设 API 可能返回归档状态
-        }
-        # 移除值为 None 的键，以保持一致性
-        result.append({k: v for k, v in project_data.items() if v is not None})
-        
+    projects = adapter.list_projects()
+    # 直接返回官方结构的精简版
+    result: List[Dict[str, Any]] = []
+    for p in projects:
+        result.append({k: v for k, v in p.items() if v is not None})
     return result
 
 def create_project_logic(
     name: str,
-    color: Optional[str] = None
+    color: Optional[str] = None,
+    view_mode: Optional[str] = None,
+    kind: Optional[str] = None,
+    sort_order: Optional[int] = None
 ) -> Dict[str, Any]:
     """
     创建新项目 (逻辑部分)
@@ -51,22 +39,23 @@ def create_project_logic(
     Returns:
         创建的项目信息 (API 原始响应)
     """
-    project_data = {
-        "name": name,
-        "color": color,
-        "inAll": True # 滴答清单 API 通常需要此字段
-    }
-    
-    # 移除None值的字段
-    project_data = {k: v for k, v in project_data.items() if v is not None}
-    
-    response = post("/api/v2/project", data=project_data)
-    return response # 返回 API 的原始响应，可能包含更完整的项目信息
+    payload = {"name": name, "color": color}
+    if view_mode is not None:
+        payload["viewMode"] = view_mode
+    if kind is not None:
+        payload["kind"] = kind
+    if sort_order is not None:
+        payload["sortOrder"] = sort_order
+    payload = {k: v for k, v in payload.items() if v is not None}
+    return adapter.create_project(**payload)
 
 def update_project_logic(
     project_id_or_name: str,
     name: Optional[str] = None,
-    color: Optional[str] = None
+    color: Optional[str] = None,
+    view_mode: Optional[str] = None,
+    kind: Optional[str] = None,
+    sort_order: Optional[int] = None
 ) -> Dict[str, Any]:
     """
     更新项目信息 (逻辑部分)
@@ -114,14 +103,18 @@ def update_project_logic(
             "name": name if name is not None else project.get('name'),
             "color": color if color is not None else project.get('color')
         }
+        if view_mode is not None:
+            update_data["viewMode"] = view_mode
+        if kind is not None:
+            update_data["kind"] = kind
+        if sort_order is not None:
+            update_data["sortOrder"] = sort_order
         # 移除 name 和 color 为 None 的情况，避免 API 报错
         update_data = {k:v for k,v in update_data.items() if v is not None}
         
         # 发送更新请求
-        response = put(f"/api/v2/project/{project_id}", data=update_data)
-        
-        # 尝试从响应中获取更新后的数据，如果API不返回，则使用发送的数据
-        updated_project_data = response if isinstance(response, dict) else update_data
+        response = adapter.update_project(project_id, name=name, color=color)
+        updated_project_data = response if isinstance(response, dict) else {**update_data, "id": project_id}
         updated_project_data['id'] = project_id # 确保 ID 在返回数据中
         
         return {
@@ -178,7 +171,7 @@ def delete_project_logic(project_id_or_name: str) -> Dict[str, Any]:
     try:
         # 发送删除请求
         # 滴答清单删除项目通常不需要请求体，直接调用DELETE方法
-        delete(f"/api/v2/project/{project_id}")
+        adapter.delete_project(project_id)
         
         return {
             "success": True,
@@ -204,15 +197,7 @@ def register_project_tools(server: FastMCP, auth_info: Dict[str, Any]):
         server: MCP服务器实例
         auth_info: 认证信息字典，包含token或email/password
     """
-    # 初始化API (如果其他模块未初始化)
-    # 可以添加一个检查，避免重复初始化
-    if not getattr(server, '_api_initialized', False):
-        try:
-            init_api(**auth_info)
-            server._api_initialized = True # 标记已初始化
-        except Exception as e:
-            print(f"API 初始化失败 (project_tools): {e}")
-            # 可能需要决定是否继续注册工具
+    # 适配层按需初始化，无需在此显式初始化
 
     @server.tool()
     def get_projects() -> List[Dict[str, Any]]:
@@ -228,7 +213,10 @@ def register_project_tools(server: FastMCP, auth_info: Dict[str, Any]):
     @server.tool()
     def create_project(
         name: str,
-        color: Optional[str] = None
+        color: Optional[str] = None,
+        view_mode: Optional[str] = None,
+        kind: Optional[str] = None,
+        sort_order: Optional[int] = None
     ) -> Dict[str, Any]:
         """
         创建新项目
@@ -241,13 +229,16 @@ def register_project_tools(server: FastMCP, auth_info: Dict[str, Any]):
         Returns:
             创建的项目信息 (API 原始响应)
         """
-        return create_project_logic(name=name, color=color)
+        return create_project_logic(name=name, color=color, view_mode=view_mode, kind=kind, sort_order=sort_order)
     
     @server.tool()
     def update_project(
         project_id_or_name: str,
         name: Optional[str] = None,
-        color: Optional[str] = None
+        color: Optional[str] = None,
+        view_mode: Optional[str] = None,
+        kind: Optional[str] = None,
+        sort_order: Optional[int] = None
     ) -> Dict[str, Any]:
         """
         更新项目信息
@@ -261,7 +252,7 @@ def register_project_tools(server: FastMCP, auth_info: Dict[str, Any]):
         Returns:
             更新操作的结果字典 (包含 success, info, data)
         """
-        return update_project_logic(project_id_or_name=project_id_or_name, name=name, color=color)
+        return update_project_logic(project_id_or_name=project_id_or_name, name=name, color=color, view_mode=view_mode, kind=kind, sort_order=sort_order)
     
     @server.tool()
     def delete_project(project_id_or_name: str) -> Dict[str, Any]:
