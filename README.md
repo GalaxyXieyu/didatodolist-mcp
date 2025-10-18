@@ -43,7 +43,7 @@ pip install -r requirements.txt
 推荐使用 OAuth 2.0：
 
 - 方式 A（配置文件）：复制 `oauth_config.json.example` 为 `oauth_config.json`，填入开放平台的 `client_id`、`client_secret`；执行 `python scripts/oauth_authenticate.py --port 38000` 完成一次性授权并写入 `access_token`。
-- 方式 B（环境变量）：在 `.env` 中设置 `MCP_API_KEY=xxx`；启动服务时客户端通过请求头 `x-api-key` 连接。
+- 方式 B（环境变量配合 .env）：在 `.env` 中配置 `MCP_API_KEY=...`、可选的 `DIDA_CLIENT_ID`、`DIDA_CLIENT_SECRET`、`DIDA_ACCESS_TOKEN`、`DIDA_REFRESH_TOKEN`（会覆盖配置文件）；客户端通过请求头 `x-api-key` 连接。
 
 最小可用步骤：
 
@@ -55,6 +55,18 @@ python scripts/oauth_authenticate.py --port 38000
 export MCP_API_KEY=your-strong-key
 python main.py --sse --host 127.0.0.1 --port 3000
 # 客户端请求头需带：x-api-key: your-strong-key
+```
+
+可选的 `.env` 示例：
+
+```
+MCP_API_KEY=your-strong-key
+# 以下为覆盖 oauth_config.json 的可选变量
+# DIDA_CLIENT_ID=...
+# DIDA_CLIENT_SECRET=...
+# DIDA_ACCESS_TOKEN=...
+# DIDA_REFRESH_TOKEN=...
+# OAUTH_CONFIG_PATH=oauth_config.json
 ```
 
 更多文档：

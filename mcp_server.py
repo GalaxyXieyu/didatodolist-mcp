@@ -3,6 +3,7 @@
 """
 
 import os
+import dotenv
 from functools import wraps
 from fastmcp import FastMCP
 # 尝试导入可能的 AuthError，如果不存在也没关系
@@ -20,6 +21,9 @@ from tools.tag_tools import register_tag_tools
 from tools.analytics_tools import register_analytics_tools
 from tools.goal_tools import register_goal_tools
 from tools.official_api import APIError, init_api
+
+# 载入 .env（若存在）
+dotenv.load_dotenv()
 
 # --- 鉴权逻辑 ---
 EXPECTED_API_KEY = os.environ.get("MCP_API_KEY", "123") # 从环境变量获取，默认'123'

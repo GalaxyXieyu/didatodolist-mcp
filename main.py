@@ -10,11 +10,10 @@ import argparse
 import json
 from pathlib import Path
 import dotenv
-from fastmcp import FastMCP
 from mcp_server import create_server
 from tools.official_api import init_api
 
-# 加载环境变量
+# 加载环境变量（支持 .env）
 dotenv.load_dotenv()
 
 def parse_args():
@@ -70,6 +69,7 @@ def parse_args():
 def ensure_oauth_ready(config_path: str = "oauth_config.json") -> bool:
     """尝试用 oauth_config.json 初始化官方API，失败则提示先执行认证脚本。"""
     try:
+        # 允许通过环境变量覆盖配置路径与令牌
         init_api(config_path=config_path)
         return True
     except Exception as e:

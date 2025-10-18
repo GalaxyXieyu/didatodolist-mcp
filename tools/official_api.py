@@ -49,9 +49,9 @@ class DidaOfficialAPI:
         self.refresh_token = None
         self.config_path = config_path
 
-        # 如果提供了配置文件路径，尝试加载
-        if not self.access_token:
-            self.load_config()
+        # 先加载配置文件，再用环境变量覆盖（.env 可生效）
+        self.load_config()
+        self.load_env()
 
     def load_config(self) -> bool:
         """
@@ -77,6 +77,42 @@ class DidaOfficialAPI:
 
         except Exception as e:
             print(f"加载配置失败: {str(e)}")
+            return False
+
+    def load_env(self) -> bool:
+        """
+        从环境变量加载/覆盖认证信息
+
+        支持变量：
+        - DIDA_CLIENT_ID
+        - DIDA_CLIENT_SECRET
+        - DIDA_ACCESS_TOKEN
+        - DIDA_REFRESH_TOKEN
+        - OAUTH_CONFIG_PATH（可覆盖默认配置路径）
+        """
+        try:
+            cfg_path = os.environ.get("OAUTH_CONFIG_PATH")
+            if cfg_path:
+                self.config_path = cfg_path
+
+            env_client_id = os.environ.get("DIDA_CLIENT_ID")
+            env_client_secret = os.environ.get("DIDA_CLIENT_SECRET")
+            env_access_token = os.environ.get("DIDA_ACCESS_TOKEN")
+            env_refresh_token = os.environ.get("DIDA_REFRESH_TOKEN")
+
+            # 若环境变量存在则覆盖
+            if env_client_id:
+                self.client_id = env_client_id
+            if env_client_secret:
+                self.client_secret = env_client_secret
+            if env_access_token:
+                self.access_token = env_access_token
+            if env_refresh_token:
+                self.refresh_token = env_refresh_token
+
+            return self.access_token is not None
+        except Exception as e:
+            print(f"加载环境变量失败: {str(e)}")
             return False
 
     def save_config(self) -> bool:
