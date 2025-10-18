@@ -24,6 +24,35 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from utils.oauth_auth import DidaOAuthClient
+import os
+
+
+def write_env_tokens(env_path: Path, access_token: str, refresh_token: str | None):
+    """将令牌写入 .env（若存在则更新相关行）。"""
+    lines = []
+    if env_path.exists():
+        with open(env_path, "r", encoding="utf-8") as f:
+            lines = f.read().splitlines()
+
+    def upsert(key: str, value: str | None):
+        nonlocal lines
+        # 删除旧行
+        lines = [ln for ln in lines if not ln.startswith(f"{key}=")]
+        if value is not None:
+            lines.append(f"{key}={value}")
+
+    upsert("DIDA_ACCESS_TOKEN", access_token)
+    upsert("DIDA_REFRESH_TOKEN", refresh_token or "")
+
+    content = "\n".join(lines) + ("\n" if not content_endswith_newline(lines) else "")
+    with open(env_path, "w", encoding="utf-8") as f:
+        f.write(content)
+
+
+def content_endswith_newline(lines: list[str]) -> bool:
+    if not lines:
+        return False
+    return lines[-1].endswith("\n")
 
 
 def main():
@@ -53,23 +82,30 @@ def main():
     # 加载配置
     config_path = Path(args.config)
 
+    use_env_only = False
+    config = {}
     if not config_path.exists():
-        print("❌ 配置文件不存在")
-        print(f"\n请创建配置文件: {args.config}")
-        print("\n示例配置:")
-        print(json.dumps({
-            "client_id": "YOUR_CLIENT_ID",
-            "client_secret": "YOUR_CLIENT_SECRET",
-            "redirect_uri": f"http://localhost:{args.port}/callback"
-        }, indent=2))
-        sys.exit(1)
-
-    with open(config_path, "r", encoding="utf-8") as f:
-        config = json.load(f)
-
-    client_id = config.get("client_id")
-    client_secret = config.get("client_secret")
-    redirect_uri = config.get("redirect_uri", f"http://localhost:{args.port}/callback")
+        # 支持使用环境变量模式（无配置文件）
+        use_env_only = True
+        client_id = os.environ.get("DIDA_CLIENT_ID")
+        client_secret = os.environ.get("DIDA_CLIENT_SECRET")
+        redirect_uri = os.environ.get("DIDA_REDIRECT_URI", f"http://localhost:{args.port}/callback")
+        if not client_id or not client_secret:
+            print("❌ 配置文件不存在，且未检测到环境变量 DIDA_CLIENT_ID / DIDA_CLIENT_SECRET")
+            print(f"\n可选择：\n1) 创建配置文件: {args.config}\n2) 或在 .env 中设置 DIDA_CLIENT_ID / DIDA_CLIENT_SECRET / DIDA_REDIRECT_URI")
+            print("\n示例配置:")
+            print(json.dumps({
+                "client_id": "YOUR_CLIENT_ID",
+                "client_secret": "YOUR_CLIENT_SECRET",
+                "redirect_uri": f"http://localhost:{args.port}/callback"
+            }, indent=2))
+            sys.exit(1)
+    else:
+        with open(config_path, "r", encoding="utf-8") as f:
+            config = json.load(f)
+        client_id = config.get("client_id")
+        client_secret = config.get("client_secret")
+        redirect_uri = config.get("redirect_uri", f"http://localhost:{args.port}/callback")
 
     if not client_id or not client_secret:
         print("❌ 配置文件缺少 client_id 或 client_secret")
@@ -90,13 +126,20 @@ def main():
 
     if success:
         # 保存令牌
-        oauth_client.save_tokens(args.config)
+        if use_env_only:
+            # 直接写入 .env（不会加入版本控制）
+            env_path = Path(".env")
+            write_env_tokens(env_path, oauth_client.access_token, oauth_client.refresh_token)
+            print(f"\n已写入 .env: DIDA_ACCESS_TOKEN / DIDA_REFRESH_TOKEN")
+        else:
+            oauth_client.save_tokens(args.config)
 
         print("\n" + "="*70)
         print("✅ OAuth认证成功!")
         print("="*70)
-        print(f"\n访问令牌已保存到: {args.config}")
-        print(f"Access Token: {oauth_client.access_token[:30]}...")
+        if not use_env_only:
+            print(f"\n访问令牌已保存到: {args.config}")
+            print(f"Access Token: {oauth_client.access_token[:30]}...")
 
         # 测试API
         print("\n正在测试API...")

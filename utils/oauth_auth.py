@@ -81,9 +81,10 @@ class DidaOAuthClient:
             client_secret: 应用Client Secret
             redirect_uri: OAuth回调地址(默认: http://localhost:8000/callback)
         """
-        self.client_id = client_id
-        self.client_secret = client_secret
-        self.redirect_uri = redirect_uri
+        # 允许使用环境变量覆盖（.env 支持）
+        self.client_id = client_id or os.environ.get("DIDA_CLIENT_ID")
+        self.client_secret = client_secret or os.environ.get("DIDA_CLIENT_SECRET")
+        self.redirect_uri = os.environ.get("DIDA_REDIRECT_URI", redirect_uri)
         self.access_token = None
         self.refresh_token = None
 
