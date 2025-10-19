@@ -1,6 +1,6 @@
-# 滴答清单 OAuth 2.0 统一指南（对齐官方 Open API）
+# 滴答清单 OAuth 2.0 统一指南（.env-only，对齐官方 Open API）
 
-本项目使用官方 OAuth 2.0 与 Open API（/open/v1）进行鉴权与访问，替代早期逆向接口，提升稳定性与安全性。
+本项目使用官方 OAuth 2.0 与 Open API（/open/v1）进行鉴权与访问，替代早期逆向接口，提升稳定性与安全性。统一采用 .env-only：令牌仅存储在 `.env` 中。
 
 ---
 
@@ -8,7 +8,7 @@
 
 - 认证模式：Authorization Code（授权码模式）
 - 回调地址：`http://localhost:38000/callback`（本地一次性授权端口）
-- 令牌保存：`oauth_config.json`（已加入 .gitignore）
+- 令牌保存：仅 `.env`（`DIDA_ACCESS_TOKEN`/`DIDA_REFRESH_TOKEN`），不再使用 `oauth_config.json`
 - 官方文档：`https://developer.dida365.com/docs#/openapi`
 
 ---
@@ -16,22 +16,21 @@
 ## 双层鉴权模型
 
 - 客户端 → MCP 服务：使用 API Key（`x-api-key` 请求头），由 `MCP_API_KEY` 环境变量配置。
-- MCP 服务 → 滴答官方 API：使用 OAuth `access_token`，由 `oauth_config.json` 提供。
+- MCP 服务 → 滴答官方 API：使用 OAuth `access_token`，由 `.env` 提供。
 
 说明：38000 端口仅用于“浏览器授权回调”的一次性本地服务器，不是长期监听端口。完成授权后即可关闭。
 
 ---
 
-## 一次性 OAuth 授权步骤（生成 oauth_config.json）
+## 一次性 OAuth 授权步骤（写入 .env）
 
-1) 准备配置文件（若未创建）
+1) 准备 `.env`（包含以下字段）
 
-```json
-{
-  "client_id": "<YOUR_CLIENT_ID>",
-  "client_secret": "<YOUR_CLIENT_SECRET>",
-  "redirect_uri": "http://localhost:38000/callback"
-}
+```
+MCP_API_KEY=your-strong-key
+DIDA_CLIENT_ID=<YOUR_CLIENT_ID>
+DIDA_CLIENT_SECRET=<YOUR_CLIENT_SECRET>
+DIDA_REDIRECT_URI=http://localhost:38000/callback
 ```
 
 2) 运行认证脚本（推荐）
@@ -40,7 +39,7 @@
 python scripts/oauth_authenticate.py --port 38000
 ```
 
-流程：启动本地回调 → 生成授权 URL → 浏览器登陆并授权 → 自动交换令牌 → 保存到 `oauth_config.json`。
+流程：启动本地回调 → 生成授权 URL → 浏览器登陆并授权 → 自动交换令牌 → 将 `DIDA_ACCESS_TOKEN`/`DIDA_REFRESH_TOKEN` 写入 `.env`。
 
 3) 远程服务器场景（可选）
 
@@ -71,7 +70,7 @@ python main.py --sse --host 127.0.0.1 --port 3000
 x-api-key: your-strong-key
 ```
 
-4) MCP → 官方 API 使用 `oauth_config.json` 中的 `access_token` 调用接口；若返回 401 且存在 `refresh_token`，会尝试自动刷新。
+4) MCP → 官方 API 使用 `.env` 中的 `access_token` 调用接口；若返回 401 且存在 `refresh_token`，会尝试自动刷新并回写 `.env`。
 
 ---
 
@@ -104,7 +103,7 @@ x-api-key: your-strong-key
 ```python
 from tools.official_api import init_api
 
-api = init_api(config_path="oauth_config.json")
+api = init_api()  # .env-only
 ```
 
 常见调用
@@ -130,7 +129,7 @@ api.delete(f"/project/{task['projectId']}/task/{task['id']}")
 
 ## 令牌刷新与过期处理
 
-- 自动刷新：收到 401 时，若 `refresh_token` 存在会自动刷新并重试请求。
+- 自动刷新：收到 401 时，若 `refresh_token` 存在会自动刷新并重试请求，同时回写新 token 到 `.env`。
 - 手动刷新：`api.refresh_access_token()`。
 - 若无 `refresh_token` 或刷新失败：重新执行授权脚本生成新的 `oauth_config.json`。
 
@@ -138,7 +137,7 @@ api.delete(f"/project/{task['projectId']}/task/{task['id']}")
 
 ## 安全与合规
 
-- 不要将 `oauth_config.json` 提交到 Git。
+- 不要将生产 `.env` 提交到 Git；使用 Secret 管理。
 - 不要在文档或代码中暴露真实 `client_secret`、`access_token`。
 - 建议为 `MCP_API_KEY` 使用强随机值，并避免与默认值 `123` 相同。
 
@@ -158,8 +157,8 @@ api.delete(f"/project/{task['projectId']}/task/{task['id']}")
 - `tools/adapter.py`：官方 API 适配层（时间/状态统一）
 - `scripts/oauth_authenticate.py`：一次性完整认证脚本
 - `scripts/generate_auth_url.py`：仅生成授权 URL
-- `oauth_config.json`：OAuth 令牌与凭据（勿入库）
+- `.env`：OAuth 令牌与凭据（勿入库，按照示例管理）
 
 ---
 
-文档版本：1.0  ｜  最后更新：2025-10-18
+文档版本：1.1  ｜  最后更新：2025-10-19

@@ -1,10 +1,13 @@
 """
-滴答清单官方API - 认证模块
-基于OAuth 2.0官方接口，替换旧的逆向接口
+滴答清单官方API - 认证模块（.env-only）
+统一使用 .env 环境变量进行配置与令牌持久化。
+
+必需/可选环境变量：
+- DIDA_CLIENT_ID, DIDA_CLIENT_SECRET（用于刷新令牌）
+- DIDA_ACCESS_TOKEN, DIDA_REFRESH_TOKEN（由授权脚本写入）
 """
 
 import os
-import json
 import requests
 from typing import Dict, Any, Optional
 from pathlib import Path
@@ -32,7 +35,6 @@ class DidaOfficialAPI:
         client_id: Optional[str] = None,
         client_secret: Optional[str] = None,
         access_token: Optional[str] = None,
-        config_path: str = "oauth_config.json"
     ):
         """
         初始化官方API客户端
@@ -47,54 +49,15 @@ class DidaOfficialAPI:
         self.client_secret = client_secret
         self.access_token = access_token
         self.refresh_token = None
-        self.config_path = config_path
 
-        # 先加载配置文件，再用环境变量覆盖（.env 可生效）
-        self.load_config()
+        # 仅从环境变量加载（.env 由上层 dotenv 加载）
         self.load_env()
-
-    def load_config(self) -> bool:
-        """
-        从配置文件加载认证信息
-
-        Returns:
-            bool: 加载是否成功
-        """
-        try:
-            config_file = Path(self.config_path)
-            if not config_file.exists():
-                return False
-
-            with open(config_file, "r", encoding="utf-8") as f:
-                config = json.load(f)
-
-            self.client_id = config.get("client_id", self.client_id)
-            self.client_secret = config.get("client_secret", self.client_secret)
-            self.access_token = config.get("access_token")
-            self.refresh_token = config.get("refresh_token")
-
-            return self.access_token is not None
-
-        except Exception as e:
-            print(f"加载配置失败: {str(e)}")
-            return False
 
     def load_env(self) -> bool:
         """
-        从环境变量加载/覆盖认证信息
-
-        支持变量：
-        - DIDA_CLIENT_ID
-        - DIDA_CLIENT_SECRET
-        - DIDA_ACCESS_TOKEN
-        - DIDA_REFRESH_TOKEN
-        - OAUTH_CONFIG_PATH（可覆盖默认配置路径）
+        从环境变量加载/覆盖认证信息（.env-only）
         """
         try:
-            cfg_path = os.environ.get("OAUTH_CONFIG_PATH")
-            if cfg_path:
-                self.config_path = cfg_path
-
             env_client_id = os.environ.get("DIDA_CLIENT_ID")
             env_client_secret = os.environ.get("DIDA_CLIENT_SECRET")
             env_access_token = os.environ.get("DIDA_ACCESS_TOKEN")
@@ -115,30 +78,35 @@ class DidaOfficialAPI:
             print(f"加载环境变量失败: {str(e)}")
             return False
 
-    def save_config(self) -> bool:
-        """
-        保存认证信息到配置文件
-
-        Returns:
-            bool: 保存是否成功
-        """
-        if not self.access_token:
-            return False
-
-        config = {
-            "client_id": self.client_id,
-            "client_secret": self.client_secret,
-            "access_token": self.access_token,
-            "refresh_token": self.refresh_token
-        }
-
+    # --- 持久化到 .env ---
+    def _update_env_tokens(self, access_token: Optional[str], refresh_token: Optional[str]):
+        """将新的令牌写入工作目录下的 .env（若存在则更新对应行）。"""
         try:
-            with open(self.config_path, "w", encoding="utf-8") as f:
-                json.dump(config, f, indent=2, ensure_ascii=False)
-            return True
+            env_path = Path(".env")
+            lines = []
+            if env_path.exists():
+                with open(env_path, "r", encoding="utf-8") as f:
+                    lines = f.read().splitlines()
+
+            def upsert(key: str, value: Optional[str]):
+                nonlocal lines
+                lines = [ln for ln in lines if not ln.startswith(f"{key}=")]
+                if value is not None:
+                    lines.append(f"{key}={value}")
+
+            if access_token:
+                upsert("DIDA_ACCESS_TOKEN", access_token)
+            if refresh_token is not None:
+                upsert("DIDA_REFRESH_TOKEN", refresh_token)
+
+            content = "\n".join(lines)
+            if not content.endswith("\n"):
+                content += "\n"
+            with open(env_path, "w", encoding="utf-8") as f:
+                f.write(content)
         except Exception as e:
-            print(f"保存配置失败: {str(e)}")
-            return False
+            # 写入失败不应阻断主流程，仅记录
+            print(f"写入 .env 令牌失败: {e}")
 
     def get_headers(self) -> Dict[str, str]:
         """
@@ -184,8 +152,8 @@ class DidaOfficialAPI:
             if new_refresh_token:
                 self.refresh_token = new_refresh_token
 
-            # 保存新令牌
-            self.save_config()
+            # 固定回写 .env（.env-only 策略）
+            self._update_env_tokens(self.access_token, self.refresh_token)
             return True
 
         except Exception as e:
@@ -293,7 +261,6 @@ def init_api(
     client_id: Optional[str] = None,
     client_secret: Optional[str] = None,
     access_token: Optional[str] = None,
-    config_path: str = "oauth_config.json"
 ) -> DidaOfficialAPI:
     """
     初始化官方API客户端
@@ -313,12 +280,11 @@ def init_api(
         client_id=client_id,
         client_secret=client_secret,
         access_token=access_token,
-        config_path=config_path
     )
 
     if not _api_client.access_token:
         raise APIError(
-            "未找到有效的access_token，请先完成OAuth认证或提供配置文件"
+            "未找到有效的access_token，请先在本机运行授权脚本写入 .env"
         )
 
     return _api_client

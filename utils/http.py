@@ -3,7 +3,6 @@ HTTP 请求工具类
 """
 from typing import Optional, Dict, Any, Union
 import requests
-from tools.base_api import APIError
 
 # 定义AuthenticationError异常类
 class AuthenticationError(Exception):

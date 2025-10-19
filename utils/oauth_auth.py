@@ -11,6 +11,7 @@ from pathlib import Path
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 import threading
+import os
 
 
 class OAuthCallbackHandler(BaseHTTPRequestHandler):

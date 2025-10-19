@@ -38,27 +38,32 @@ cd didatodolist-mcp
 pip install -r requirements.txt
 ```
 
-3) 配置与认证
+3) 配置与认证（.env-only）
 
-推荐使用 OAuth 2.0：
+推荐使用 OAuth 2.0（仅 .env）：
 
-- 方式 A（配置文件）：复制 `oauth_config.json.example` 为 `oauth_config.json`，填入开放平台的 `client_id`、`client_secret`；执行 `python scripts/oauth_authenticate.py --port 38000` 完成一次性授权并写入 `access_token`。
-- 方式 B（环境变量配合 .env）：在 `.env` 中配置 `MCP_API_KEY=...`、可选的 `DIDA_CLIENT_ID`、`DIDA_CLIENT_SECRET`、`DIDA_ACCESS_TOKEN`、`DIDA_REFRESH_TOKEN`（会覆盖配置文件）；客户端通过请求头 `x-api-key` 连接。
+获取 Client ID / Secret：
+- 打开滴答清单开放平台文档入口：https://developer.dida365.com/docs#/openapi
+- 在开放平台创建一个应用（填写名称）。
+- 在应用设置中将 OAuth Redirect URL 填写为：`http://localhost:38000/callback`
+- 复制应用的 `client_id` 与 `client_secret`，用于下方 `.env` 配置。
 
-最小可用步骤（两种任选其一）：
+参考图：
+
+![创建应用示例](docs/1.png)
+
+![设置回调地址示例](docs/2.png)
+
+- 在 `.env` 中配置 `MCP_API_KEY=...`、`DIDA_CLIENT_ID`、`DIDA_CLIENT_SECRET`；运行 `python scripts/oauth_authenticate.py --port 38000` 完成一次性授权，脚本会将 `DIDA_ACCESS_TOKEN`、`DIDA_REFRESH_TOKEN` 写入 `.env`。
+
+最小可用步骤：
 
 ```bash
-# A) 配置文件方式
-cp oauth_config.json.example oauth_config.json
-# 编辑 oauth_config.json，填入 client_id/client_secret
-python scripts/oauth_authenticate.py --port 38000  # 生成 access_token 到 oauth_config.json
-
-# B) 仅用 .env 方式
 cp .env.example .env
 # 编辑 .env，至少填写 MCP_API_KEY、DIDA_CLIENT_ID、DIDA_CLIENT_SECRET
 python scripts/oauth_authenticate.py --port 38000  # 成功后写入 DIDA_ACCESS_TOKEN/DIDA_REFRESH_TOKEN 到 .env
 
-# 启动服务（两种方式任何一种完成后即可）
+# 启动服务
 export MCP_API_KEY=your-strong-key  # 或直接在 .env 中配置
 python main.py --sse --host 127.0.0.1 --port 3000
 # 客户端请求头需带：x-api-key: your-strong-key
@@ -68,21 +73,52 @@ python main.py --sse --host 127.0.0.1 --port 3000
 
 ```
 MCP_API_KEY=your-strong-key
-# 以下为覆盖 oauth_config.json 的可选变量
+# 以下变量由 .env-only 管理
 # DIDA_CLIENT_ID=...
 # DIDA_CLIENT_SECRET=...
 # DIDA_ACCESS_TOKEN=...
 # DIDA_REFRESH_TOKEN=...
-# OAUTH_CONFIG_PATH=oauth_config.json
 ```
 
 更多文档：
-- 统一 OAuth 指南：`docs/openapi_oauth_guide.md`
+- 统一 OAuth 指南（.env-only）：`docs/openapi_oauth_guide.md`
 - 文档索引：`docs/openapi_index.md`
 - 项目接口：`docs/openapi_project.md`
 - 任务接口：`docs/openapi_task.md`
 - 数据模型定义：`docs/openapi_definitions.md`
 - 本地调试（Inspector/mcp-cli）：`docs/dev_debug_inspector.md`
+
+### Docker/Compose 部署（.env-only）
+
+推荐在本机先完成一次性 OAuth 授权，把令牌写入 `.env` 后再部署容器（云上无需开放 38000）。
+
+1) 本地预授权（写入 `.env`）
+
+```bash
+cp .env.example .env
+# 填写 MCP_API_KEY、DIDA_CLIENT_ID、DIDA_CLIENT_SECRET
+python scripts/oauth_authenticate.py --port 38000  # 成功后写入 DIDA_ACCESS_TOKEN / DIDA_REFRESH_TOKEN
+```
+
+2) 使用 Docker Compose 运行（仅需 3000 端口）
+
+```bash
+# 将授权后的 .env 复制为 data/.env（或直接放置）
+mkdir -p data && cp .env data/.env
+
+docker compose up -d --build mcp
+# SSE 入口： http://<host>:3000/sse （Headers: x-api-key: <你的 MCP_API_KEY>）
+```
+
+3) 使用 MCP Inspector 或 mcp-cli 连接
+
+- Inspector：`npx @modelcontextprotocol/inspector`，Transport 选 SSE，URL `http://<host>:3000/sse`，Headers `x-api-key: <你的 MCP_API_KEY>`
+- mcp-cli：`npx @wong2/mcp-cli`，选择 SSE，填相同 URL 与 Headers
+
+说明与最佳实践：
+- callback(38000) 仅发生在“授权当时”，容器运行不依赖该端口；云上只需暴露 3000 或经反代直通 `/sse`。
+- 强随机化 `MCP_API_KEY` 并通过反向代理透传 `x-api-key`；生产可限制来源 IP。
+- 令牌过期时，服务端会尝试利用 `DIDA_REFRESH_TOKEN` 自动刷新；默认仅在内存更新，重启后继续从 `.env` 读取。
 
 ---
 
@@ -100,11 +136,9 @@ python main.py
 python main.py --sse --host 127.0.0.1 --port 3000
 ```
 
-### 指定配置文件路径（使用 oauth_config.json 时）
+### 指定配置文件路径
 
-```bash
-python main.py --config "oauth_config.json"
-```
+已统一为 .env-only，不再支持单独的配置文件路径参数。
 
 ### 安装到 MCP 客户端
 
@@ -115,7 +149,7 @@ python main.py --install
 ## 端口与鉴权
 
 - 回调端口（一次性授权）：`38000`
-  - 与 `oauth_config.json` 的 `redirect_uri` 对齐，例如 `http://localhost:38000/callback`
+  - 与环境变量 `DIDA_REDIRECT_URI` 对齐，例如 `http://localhost:38000/callback`
   - 仅在运行 `scripts/oauth_authenticate.py` 进行 OAuth 授权时临时监听
 
 - MCP 服务端口（SSE）：`3000`
@@ -136,15 +170,12 @@ python main.py --sse --host 127.0.0.1 --port 3000
 - 服务端口：3000（SSE 连接 MCP 服务）
 - 鉴权：客户端连接时需携带 `x-api-key`，服务端校验 `MCP_API_KEY`
 
-## 认证机制
+## 认证机制（.env-only）
 
-系统采用智能认证机制：
-
-1. 优先使用提供的token进行认证
-2. 如果没有token但提供了手机号/邮箱和密码，系统会自动登录获取token
-3. 获取的token会与账号信息一起保存到配置文件，后续运行时自动使用保存的token
-4. 即使用户传入相同的账号密码参数，也会优先使用已保存的token，避免频繁登录触发风控
-5. 只有当传入的账号密码与配置文件中的不一致时，才会尝试使用新账号登录
+- 服务 → 官方 API：从 `.env` 读取 `DIDA_ACCESS_TOKEN`/`DIDA_REFRESH_TOKEN` 进行 OAuth 调用。
+- 自动刷新：当返回 401 时，使用 `DIDA_REFRESH_TOKEN` 自动刷新并回写新的令牌到 `.env`。
+- 不再支持手机号/邮箱密码直登；也不使用任何 `oauth_config.json`/`config.json` 文件。
+- 客户端 → 服务：通过 `x-api-key` 请求头，服务端校验 `MCP_API_KEY`。
 
 ## 功能模块
 

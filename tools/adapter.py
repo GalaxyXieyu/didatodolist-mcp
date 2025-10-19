@@ -1,10 +1,10 @@
 """
-官方 OpenAPI 适配层
+官方 OpenAPI 适配层（.env-only）
 将工具层对滴答清单的调用统一为基于 OAuth 的 /open/v1 接口，
 并提供时间/状态字段的集中映射与错误处理。
 
 注意：端点与字段以官方文档为准：https://developer.dida365.com/docs#/openapi
-若接口差异导致入参/出参变化，应在本模块集中做适配，避免修改上层业务逻辑。
+令牌与配置仅来自 .env（由授权脚本写入）。
 """
 
 from __future__ import annotations
@@ -22,11 +22,11 @@ from .official_api import (
 
 
 class DidaAdapter:
-    """官方 API 的轻量适配器。"""
+    """官方 API 的轻量适配器（.env-only）。"""
 
-    def __init__(self, config_path: str = "oauth_config.json"):
-        self.config_path = config_path
+    def __init__(self):
         # 延迟初始化，首次使用时再创建
+        pass
 
     # ---------- 公共工具：时间与状态 ----------
     @staticmethod
@@ -106,8 +106,8 @@ class DidaAdapter:
         try:
             return get_api_client()
         except Exception:
-            # 若尚未初始化，则尝试基于配置初始化
-            return init_official_api(config_path=self.config_path)
+            # 若尚未初始化，则基于 .env 初始化
+            return init_official_api()
 
     # ---------- Projects ----------
     def list_projects(self) -> List[Dict[str, Any]]:

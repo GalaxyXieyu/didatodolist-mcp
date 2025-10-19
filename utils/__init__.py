@@ -1,14 +1,9 @@
 """
-滴答清单工具模块
+滴答清单工具包初始化（精简版）
+
+为避免导入包时意外加载已废弃模块（如旧鉴权/逆向接口），此处不做任何包级导入。
+按需从子模块显式导入，例如：
+    from utils.oauth_auth import DidaOAuthClient
 """
 
-# 避免相对导入错误
-try:
-    from utils.http import HttpClient
-    from utils.auth import TokenManager, get_token
-except ImportError:
-    # 对于直接运行模块的情况，使用相对导入
-    from .http import HttpClient
-    from .auth import TokenManager, get_token
-
-__all__ = ["HttpClient", "TokenManager", "get_token"]
+__all__: list[str] = []

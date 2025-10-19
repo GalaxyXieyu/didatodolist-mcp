@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-滴答清单OAuth完整认证流程
+滴答清单 OAuth 完整认证流程（.env-only）
 
 功能:
 1. 启动本地回调服务器
@@ -8,7 +8,7 @@
 3. 接收授权码
 4. 交换访问令牌
 5. 测试API调用
-6. 保存配置
+6. 将令牌写入 .env（DIDA_ACCESS_TOKEN / DIDA_REFRESH_TOKEN）
 
 使用:
     python scripts/oauth_authenticate.py
@@ -17,14 +17,15 @@
 
 import sys
 import argparse
-import json
 from pathlib import Path
 
 # 添加项目根目录到路径
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from utils.oauth_auth import DidaOAuthClient
 import os
+import json
+import dotenv
+from utils.oauth_auth import DidaOAuthClient
 
 
 def write_env_tokens(env_path: Path, access_token: str, refresh_token: str | None):
@@ -56,15 +57,9 @@ def content_endswith_newline(lines: list[str]) -> bool:
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="滴答清单OAuth认证"
-    )
-
-    parser.add_argument(
-        "--config",
-        default="oauth_config.json",
-        help="配置文件路径"
-    )
+    # 加载 .env，确保 DIDA_CLIENT_ID/SECRET 可被读取
+    dotenv.load_dotenv()
+    parser = argparse.ArgumentParser(description="滴答清单OAuth认证（.env-only）")
 
     parser.add_argument(
         "--port",
@@ -79,33 +74,20 @@ def main():
     print("滴答清单OAuth 2.0 认证")
     print("="*70 + "\n")
 
-    # 加载配置
-    config_path = Path(args.config)
-
-    use_env_only = False
-    config = {}
-    if not config_path.exists():
-        # 支持使用环境变量模式（无配置文件）
-        use_env_only = True
-        client_id = os.environ.get("DIDA_CLIENT_ID")
-        client_secret = os.environ.get("DIDA_CLIENT_SECRET")
-        redirect_uri = os.environ.get("DIDA_REDIRECT_URI", f"http://localhost:{args.port}/callback")
-        if not client_id or not client_secret:
-            print("❌ 配置文件不存在，且未检测到环境变量 DIDA_CLIENT_ID / DIDA_CLIENT_SECRET")
-            print(f"\n可选择：\n1) 创建配置文件: {args.config}\n2) 或在 .env 中设置 DIDA_CLIENT_ID / DIDA_CLIENT_SECRET / DIDA_REDIRECT_URI")
-            print("\n示例配置:")
-            print(json.dumps({
-                "client_id": "YOUR_CLIENT_ID",
-                "client_secret": "YOUR_CLIENT_SECRET",
-                "redirect_uri": f"http://localhost:{args.port}/callback"
-            }, indent=2))
-            sys.exit(1)
-    else:
-        with open(config_path, "r", encoding="utf-8") as f:
-            config = json.load(f)
-        client_id = config.get("client_id")
-        client_secret = config.get("client_secret")
-        redirect_uri = config.get("redirect_uri", f"http://localhost:{args.port}/callback")
+    # 仅使用 .env 环境变量
+    client_id = os.environ.get("DIDA_CLIENT_ID")
+    client_secret = os.environ.get("DIDA_CLIENT_SECRET")
+    redirect_uri = os.environ.get("DIDA_REDIRECT_URI", f"http://localhost:{args.port}/callback")
+    if not client_id or not client_secret:
+        print("❌ 未检测到环境变量 DIDA_CLIENT_ID / DIDA_CLIENT_SECRET")
+        print("请在 .env 中设置以下变量后重试：\n")
+        example = {
+            "DIDA_CLIENT_ID": "YOUR_CLIENT_ID",
+            "DIDA_CLIENT_SECRET": "YOUR_CLIENT_SECRET",
+            "DIDA_REDIRECT_URI": f"http://localhost:{args.port}/callback"
+        }
+        print(json.dumps(example, indent=2))
+        sys.exit(1)
 
     if not client_id or not client_secret:
         print("❌ 配置文件缺少 client_id 或 client_secret")
@@ -125,21 +107,15 @@ def main():
     success = oauth_client.authorize(auto_open_browser=False)
 
     if success:
-        # 保存令牌
-        if use_env_only:
-            # 直接写入 .env（不会加入版本控制）
-            env_path = Path(".env")
-            write_env_tokens(env_path, oauth_client.access_token, oauth_client.refresh_token)
-            print(f"\n已写入 .env: DIDA_ACCESS_TOKEN / DIDA_REFRESH_TOKEN")
-        else:
-            oauth_client.save_tokens(args.config)
+        # 写入 .env（不会加入版本控制）
+        env_path = Path(".env")
+        write_env_tokens(env_path, oauth_client.access_token, oauth_client.refresh_token)
+        print(f"\n已写入 .env: DIDA_ACCESS_TOKEN / DIDA_REFRESH_TOKEN")
 
         print("\n" + "="*70)
         print("✅ OAuth认证成功!")
         print("="*70)
-        if not use_env_only:
-            print(f"\n访问令牌已保存到: {args.config}")
-            print(f"Access Token: {oauth_client.access_token[:30]}...")
+        print(f"Access Token: {oauth_client.access_token[:30]}...")
 
         # 测试API
         print("\n正在测试API...")

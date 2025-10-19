@@ -42,11 +42,7 @@ def parse_args():
         "--password",
         help="滴答清单账户密码"
     )
-    parser.add_argument(
-        "--config",
-        help="配置文件路径",
-        default="oauth_config.json"
-    )
+    # 统一 .env-only，不再支持 config 文件路径
     parser.add_argument(
         "--port",
         type=int,
@@ -66,24 +62,23 @@ def parse_args():
 
     return parser.parse_args()
 
-def ensure_oauth_ready(config_path: str = "oauth_config.json") -> bool:
-    """尝试用 oauth_config.json 初始化官方API，失败则提示先执行认证脚本。"""
+def ensure_oauth_ready() -> bool:
+    """仅使用 .env 初始化官方API。"""
     try:
-        # 允许通过环境变量覆盖配置路径与令牌
-        init_api(config_path=config_path)
+        init_api()
         return True
     except Exception as e:
         print("未检测到有效的 OAuth access_token。")
         print("请先运行 OAuth 认证脚本：")
         print("  python scripts/oauth_authenticate.py --port 38000")
-        print("完成后将生成 oauth_config.json，再次运行本服务即可。")
+        print("脚本会将 DIDA_ACCESS_TOKEN / DIDA_REFRESH_TOKEN 写入 .env，然后再启动本服务。")
         print(f"详情: {e}")
         return False
 
 def main():
     """主函数"""
     args = parse_args()
-    if not ensure_oauth_ready(config_path=args.config):
+    if not ensure_oauth_ready():
         # 不中止运行，允许用户仅安装/查看说明
         pass
 

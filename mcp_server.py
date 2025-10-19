@@ -75,12 +75,12 @@ def create_server(auth_info=None):
     Returns:
         配置好的MCP服务器实例
     """
-    # OAuth 初始化：优先从 oauth_config.json 读取，若不存在则使用 .env 覆盖
+    # OAuth 初始化：仅使用 .env（.env-only）
     try:
-        init_api(config_path="oauth_config.json")
-        print("已初始化官方API 客户端（支持 .env 覆盖）")
+        init_api()
+        print("已初始化官方API 客户端（.env-only）")
     except Exception as e:
-        print(f"警告：未能初始化官方API（可能尚未完成 OAuth 认证）：{e}")
+        print(f"警告：未能初始化官方API（可能尚未完成 OAuth 认证 .env）：{e}")
 
     try:
         print(f"期望的 MCP API Key: {EXPECTED_API_KEY}") # 确认环境变量已加载

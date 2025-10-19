@@ -1,0 +1,27 @@
+services:
+  mcp:
+    build:
+      context: .
+      args:
+        # 使用国内镜像源加速拉取基础镜像，如需更换可改为：
+        # docker.m.daocloud.io/library/python:3.11-slim
+        # hub-mirror.c.163.com/library/python:3.11-slim
+        # mirror.ccs.tencentyun.com/library/python:3.11-slim
+        PY_BASE: dockerproxy.com/library/python:3.11-slim
+    image: dida-mcp:latest
+    container_name: dida-mcp
+    ports:
+      - "3000:3000"
+    environment:
+      # 客户端→服务鉴权：SSE 连接时需在请求头携带 x-api-key
+      - MCP_API_KEY=${MCP_API_KEY}
+      # 服务→官方 API：推荐保留 client_id/secret 以便刷新令牌
+      - DIDA_CLIENT_ID=${DIDA_CLIENT_ID}
+      - DIDA_CLIENT_SECRET=${DIDA_CLIENT_SECRET}
+      # 若已预授权，也可由 .env 文件提供
+      # - DIDA_ACCESS_TOKEN=${DIDA_ACCESS_TOKEN}
+      # - DIDA_REFRESH_TOKEN=${DIDA_REFRESH_TOKEN}
+    volumes:
+      # 仅使用 .env 托管令牌：容器内由 python-dotenv 自动加载
+      - ./data/.env:/app/.env
+    restart: unless-stopped
