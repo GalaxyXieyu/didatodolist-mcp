@@ -87,6 +87,68 @@ MCP_API_KEY=your-strong-key
 - 任务接口：`docs/openapi_task.md`
 - 数据模型定义：`docs/openapi_definitions.md`
 - 本地调试（Inspector/mcp-cli）：`docs/dev_debug_inspector.md`
+- OpenClaw 插件：`docs/openclaw_plugin.md`
+- OpenClaw 原生插件（Open API）：`docs/openclaw_openapi_plugin.md`
+
+## OpenClaw 原生插件（推荐）
+
+该插件直接调用滴答清单官方 Open API，不依赖 MCP 服务。
+
+### 1) 安装插件
+
+```bash
+openclaw plugins install -l ./openclaw-openapi-plugin
+```
+
+### 2) 写入 OpenClaw 配置并完成 OAuth
+
+推荐使用脚本自动写入（会把 token 写入 `~/.openclaw/openclaw.json`，并确保 allowlist）：
+
+```bash
+python3 scripts/oauth_openclaw.py --open-browser
+```
+
+脚本会读取以下配置（如果缺失可手动写入）：
+
+```json
+{
+  "plugins": {
+    "enabled": true,
+    "entries": {
+      "dida-openapi": {
+        "enabled": true,
+        "config": {
+          "clientId": "<YOUR_CLIENT_ID>",
+          "clientSecret": "<YOUR_CLIENT_SECRET>",
+          "redirectUri": "http://localhost:38000/callback",
+          "accessToken": "<ACCESS_TOKEN>",
+          "refreshToken": "<REFRESH_TOKEN>",
+          "timeoutMs": 15000,
+          "autoRefresh": true
+        }
+      }
+    }
+  },
+  "tools": {
+    "allow": ["dida-openapi"]
+  }
+}
+```
+
+### 3) 重启 Gateway 使配置生效
+
+```bash
+openclaw gateway restart
+```
+
+### 4) 验证是否可调用
+
+```bash
+openclaw plugins info dida-openapi
+openclaw agent --agent main --message "请调用工具 dida_get_projects 并返回结果" --thinking minimal --timeout 30 --json
+```
+
+如果 UI 提示“未配置 accessToken”，说明 Gateway 未读到最新配置或 token 已过期：请先运行授权脚本，再重启 Gateway。
 
 ### Docker/Compose 部署（.env-only）
 

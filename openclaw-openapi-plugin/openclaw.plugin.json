@@ -1,0 +1,103 @@
+{
+  "id": "dida-openapi",
+  "name": "Dida Todo (Open API)",
+  "description": "直接使用滴答清单官方 Open API（不依赖 MCP）",
+  "version": "0.1.0",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "clientId": {
+        "type": "string",
+        "description": "滴答开放平台 Client ID"
+      },
+      "clientSecret": {
+        "type": "string",
+        "description": "滴答开放平台 Client Secret"
+      },
+      "redirectUri": {
+        "type": "string",
+        "description": "OAuth 回调地址，例如 http://localhost:38000/callback"
+      },
+      "accessToken": {
+        "type": "string",
+        "description": "OAuth Access Token"
+      },
+      "refreshToken": {
+        "type": "string",
+        "description": "OAuth Refresh Token"
+      },
+      "baseUrl": {
+        "type": "string",
+        "description": "Open API 基础地址，默认 https://api.dida365.com/open/v1"
+      },
+      "authUrl": {
+        "type": "string",
+        "description": "OAuth 授权地址，默认 https://dida365.com/oauth/authorize"
+      },
+      "tokenUrl": {
+        "type": "string",
+        "description": "OAuth 令牌地址，默认 https://dida365.com/oauth/token"
+      },
+      "timeoutMs": {
+        "type": "integer",
+        "minimum": 1000,
+        "maximum": 120000,
+        "description": "请求超时（毫秒）"
+      },
+      "timeZone": {
+        "type": "string",
+        "description": "用于 today/yesterday 过滤的时区（IANA），默认使用系统时区"
+      },
+      "autoRefresh": {
+        "type": "boolean",
+        "description": "收到 401 时是否自动刷新令牌"
+      }
+    }
+  },
+  "uiHints": {
+    "clientId": {
+      "label": "Client ID"
+    },
+    "clientSecret": {
+      "label": "Client Secret",
+      "sensitive": true
+    },
+    "redirectUri": {
+      "label": "Redirect URI",
+      "placeholder": "http://localhost:38000/callback"
+    },
+    "accessToken": {
+      "label": "Access Token",
+      "sensitive": true
+    },
+    "refreshToken": {
+      "label": "Refresh Token",
+      "sensitive": true
+    },
+    "baseUrl": {
+      "label": "Open API Base URL",
+      "placeholder": "https://api.dida365.com/open/v1"
+    },
+    "authUrl": {
+      "label": "OAuth Authorize URL",
+      "placeholder": "https://dida365.com/oauth/authorize"
+    },
+    "tokenUrl": {
+      "label": "OAuth Token URL",
+      "placeholder": "https://dida365.com/oauth/token"
+    },
+    "timeoutMs": {
+      "label": "Timeout (ms)",
+      "placeholder": "15000"
+    },
+    "timeZone": {
+      "label": "Time Zone",
+      "placeholder": "America/Los_Angeles"
+    },
+    "autoRefresh": {
+      "label": "Auto Refresh",
+      "placeholder": "true"
+    }
+  }
+}

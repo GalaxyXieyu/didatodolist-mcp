@@ -1,0 +1,49 @@
+{
+  "id": "dida-todo",
+  "name": "Dida Todo (MCP)",
+  "description": "通过 didatodolist-mcp 服务操作滴答清单任务与项目",
+  "version": "0.1.0",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "sseUrl": {
+        "type": "string",
+        "description": "MCP SSE 地址，例如 http://127.0.0.1:3000/sse"
+      },
+      "apiKey": {
+        "type": "string",
+        "description": "MCP API Key，会写入 x-api-key 请求头"
+      },
+      "timeoutMs": {
+        "type": "integer",
+        "minimum": 1000,
+        "maximum": 120000,
+        "description": "单次调用超时（毫秒）"
+      },
+      "protocolVersion": {
+        "type": "string",
+        "description": "MCP 协议版本，例如 2024-11-05"
+      }
+    },
+    "required": ["apiKey"]
+  },
+  "uiHints": {
+    "sseUrl": {
+      "label": "MCP SSE URL",
+      "placeholder": "http://127.0.0.1:3000/sse"
+    },
+    "apiKey": {
+      "label": "MCP API Key",
+      "sensitive": true
+    },
+    "timeoutMs": {
+      "label": "Timeout (ms)",
+      "placeholder": "15000"
+    },
+    "protocolVersion": {
+      "label": "Protocol Version",
+      "placeholder": "2024-11-05"
+    }
+  }
+}
