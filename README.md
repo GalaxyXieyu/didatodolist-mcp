@@ -8,6 +8,7 @@
 > - 项目：GET/POST/POST(id)/DELETE /open/v1/project
 > - 任务：POST /open/v1/task，POST /open/v1/task/{taskId}，POST 完成 /open/v1/project/{projectId}/task/{taskId}/complete，DELETE /open/v1/project/{projectId}/task/{taskId}
 > - 汇总任务：官方无全局任务列表，使用 GET /open/v1/project/{projectId}/data 聚合
+> - 已完成任务：GET /open/v1/project/{projectId}/task/completed（用于拉取 completed 任务，部分文档未覆盖该端点）
 > - 标签：暂无写接口，当前工具仅提供只读聚合视图
 
 ## 主要功能

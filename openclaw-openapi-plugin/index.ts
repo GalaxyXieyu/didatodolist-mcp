@@ -30,7 +30,7 @@ export default function register(api: any) {
 function registerTools(api: any) {
   registerTool(api, {
     name: "dida_auth_url",
-    description: "生成滴答清单 OAuth 授权链接",
+    description: "生成滴答清单 OAuth 授权链接（首次绑定或 token 失效时使用）。",
     parameters: {
       type: "object",
       additionalProperties: false,
@@ -45,7 +45,7 @@ function registerTools(api: any) {
 
   registerTool(api, {
     name: "dida_exchange_code",
-    description: "使用授权码换取 access_token/refresh_token",
+    description: "使用授权码换取 access_token/refresh_token，并用于后续所有滴答工具调用。",
     parameters: {
       type: "object",
       additionalProperties: false,
@@ -60,7 +60,7 @@ function registerTools(api: any) {
 
   registerTool(api, {
     name: "dida_refresh_token",
-    description: "刷新 access_token",
+    description: "刷新 access_token（401/过期时使用）。",
     parameters: {
       type: "object",
       additionalProperties: false,
@@ -73,7 +73,7 @@ function registerTools(api: any) {
 
   registerTool(api, {
     name: "dida_get_projects",
-    description: "获取滴答清单项目列表",
+    description: "获取滴答清单项目列表。用户问“有几个项目/项目数量”时应优先调用本工具。",
     parameters: {
       type: "object",
       additionalProperties: false,
@@ -84,7 +84,7 @@ function registerTools(api: any) {
 
   registerTool(api, {
     name: "dida_create_project",
-    description: "创建滴答清单项目",
+    description: "创建滴答清单项目（至少提供 name）。",
     parameters: {
       type: "object",
       additionalProperties: false,
@@ -102,7 +102,7 @@ function registerTools(api: any) {
 
   registerTool(api, {
     name: "dida_update_project",
-    description: "更新滴答清单项目",
+    description: "更新滴答清单项目（按 project_id_or_name 精确定位）。",
     parameters: {
       type: "object",
       additionalProperties: false,
@@ -121,7 +121,7 @@ function registerTools(api: any) {
 
   registerTool(api, {
     name: "dida_delete_project",
-    description: "删除滴答清单项目",
+    description: "删除滴答清单项目（按 project_id_or_name）。",
     parameters: {
       type: "object",
       additionalProperties: false,
@@ -135,7 +135,8 @@ function registerTools(api: any) {
 
   registerTool(api, {
     name: "dida_get_tasks",
-    description: "获取滴答清单任务列表",
+    description:
+      "查询任务列表（支持 mode/project_name/keyword/priority/completed 过滤）。用户问“今天任务/最近任务/某项目任务”时优先调用。",
     parameters: {
       type: "object",
       additionalProperties: false,
@@ -155,8 +156,29 @@ function registerTools(api: any) {
   });
 
   registerTool(api, {
+    name: "tt_task_list",
+    description: "dida_get_tasks 的英文别名（today/project/keyword 场景）。",
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        mode: {
+          type: "string",
+          description: "task mode: all/today/yesterday/recent_7_days",
+          enum: ["all", "today", "yesterday", "recent_7_days"]
+        },
+        keyword: { type: "string", description: "keyword filter" },
+        priority: { type: "integer", description: "priority: 0/1/3/5", enum: [0, 1, 3, 5] },
+        project_name: { type: "string", description: "project name filter" },
+        completed: { type: "boolean", description: "completed?" }
+      }
+    },
+    run: async (api, params) => getTasks(api, params)
+  });
+
+  registerTool(api, {
     name: "dida_create_task",
-    description: "创建滴答清单任务",
+    description: "创建任务（title 必填；可选 due/start/project/priority 等）。",
     parameters: {
       type: "object",
       additionalProperties: false,
@@ -185,7 +207,7 @@ function registerTools(api: any) {
 
   registerTool(api, {
     name: "dida_update_task",
-    description: "更新滴答清单任务",
+    description: "更新任务（按 task_id_or_title；status=2 可直接完成）。",
     parameters: {
       type: "object",
       additionalProperties: false,
@@ -216,7 +238,7 @@ function registerTools(api: any) {
 
   registerTool(api, {
     name: "dida_complete_task",
-    description: "完成滴答清单任务",
+    description: "完成任务（按 task_id_or_title）。",
     parameters: {
       type: "object",
       additionalProperties: false,
@@ -230,12 +252,80 @@ function registerTools(api: any) {
 
   registerTool(api, {
     name: "dida_delete_task",
-    description: "删除滴答清单任务",
+    description: "删除任务（按 task_id_or_title）。",
     parameters: {
       type: "object",
       additionalProperties: false,
       properties: {
         task_id_or_title: { type: "string", description: "任务ID或标题" }
+      },
+      required: ["task_id_or_title"]
+    },
+    run: async (api, params) => deleteTask(api, params)
+  });
+
+  // Short aliases (keep dida_* for compatibility)
+  registerTool(api, {
+    name: "tt_task_create",
+    description: "dida_create_task 的英文别名。",
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        title: { type: "string", description: "title" },
+        content: { type: "string", description: "content" },
+        priority: { type: "integer", description: "priority: 0/1/3/5", enum: [0, 1, 3, 5] },
+        project_name: { type: "string", description: "project name" },
+        start_date: { type: "string", description: "start (YYYY-MM-DD HH:MM:SS)" },
+        due_date: { type: "string", description: "due (YYYY-MM-DD HH:MM:SS)" },
+        is_all_day: { type: "boolean", description: "all-day?" }
+      },
+      required: ["title"]
+    },
+    run: async (api, params) => createTask(api, params)
+  });
+
+  registerTool(api, {
+    name: "tt_task_update",
+    description: "dida_update_task 的英文别名。",
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        task_id_or_title: { type: "string", description: "task id or title" },
+        title: { type: "string", description: "new title" },
+        content: { type: "string", description: "new content" },
+        due_date: { type: "string", description: "new due" },
+        priority: { type: "integer", description: "new priority: 0/1/3/5", enum: [0, 1, 3, 5] },
+        status: { type: "integer", description: "0=active, 2=completed" }
+      },
+      required: ["task_id_or_title"]
+    },
+    run: async (api, params) => updateTask(api, params)
+  });
+
+  registerTool(api, {
+    name: "tt_task_complete",
+    description: "dida_complete_task 的英文别名。",
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        task_id_or_title: { type: "string", description: "task id or title" }
+      },
+      required: ["task_id_or_title"]
+    },
+    run: async (api, params) => completeTask(api, params)
+  });
+
+  registerTool(api, {
+    name: "tt_task_delete",
+    description: "dida_delete_task 的英文别名。",
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        task_id_or_title: { type: "string", description: "task id or title" }
       },
       required: ["task_id_or_title"]
     },
@@ -313,6 +403,13 @@ function getConfig(api: any) {
   if (cfg.accessToken) state.accessToken = cfg.accessToken;
   if (cfg.refreshToken) state.refreshToken = cfg.refreshToken;
 
+  let systemTimeZone: string | undefined;
+  try {
+    systemTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch {
+    systemTimeZone = undefined;
+  }
+
   return {
     clientId: state.clientId,
     clientSecret: state.clientSecret,
@@ -323,7 +420,9 @@ function getConfig(api: any) {
     authUrl: cfg.authUrl || DEFAULT_AUTH_URL,
     tokenUrl: cfg.tokenUrl || DEFAULT_TOKEN_URL,
     timeoutMs: normalizeTimeout(cfg.timeoutMs),
-    timeZone: cfg.timeZone,
+    // Default to system timezone so today/yesterday filters work for all-day tasks.
+    // Fallback to Asia/Shanghai for this environment if system timezone isn't available.
+    timeZone: cfg.timeZone || systemTimeZone || "Asia/Shanghai", 
     autoRefresh: cfg.autoRefresh !== false
   };
 }
@@ -658,12 +757,14 @@ async function resolveProjectId(api: any, projectIdOrName: string) {
 }
 
 async function getTasks(api: any, params: Record<string, any>) {
-  const { tasks } = await listAllTasks(api);
+  const completed = params.completed;
+  // The official "project/{id}/data" endpoint returns only active (uncompleted) tasks.
+  // Completed tasks live behind "project/{id}/task/completed".
+  const { tasks } = await listAllTasks(api, { completed });
   const mode = params.mode || "all";
   const keyword = params.keyword ? String(params.keyword).toLowerCase() : "";
   const priority = params.priority;
   const projectName = params.project_name ? String(params.project_name) : "";
-  const completed = params.completed;
   const cfg = getConfig(api);
 
   const todayKey = mode === "today" || mode === "yesterday" ? dateKey(new Date(), cfg.timeZone) : null;
@@ -703,20 +804,50 @@ async function getTasks(api: any, params: Record<string, any>) {
   });
 }
 
-async function listAllTasks(api: any) {
+async function listAllTasks(api: any, opts: { completed?: boolean } = {}) {
   const projects = await didaRequest(api, "GET", "project");
   const tasks: any[] = [];
+
   if (Array.isArray(projects)) {
     for (const project of projects) {
       if (!project?.id) continue;
-      const data = await didaRequest(api, "GET", `project/${project.id}/data`);
-      const projectTasks = Array.isArray(data?.tasks) ? data.tasks : [];
-      for (const task of projectTasks) {
-        tasks.push(normalizeTask(task, project));
+
+      if (opts.completed === true) {
+        const completedTasks = await listProjectCompletedTasks(api, project.id);
+        for (const task of completedTasks) {
+          tasks.push(normalizeTask(task, project));
+        }
+      } else {
+        const data = await didaRequest(api, "GET", `project/${project.id}/data`);
+        const projectTasks = Array.isArray(data?.tasks) ? data.tasks : [];
+        for (const task of projectTasks) {
+          tasks.push(normalizeTask(task, project));
+        }
       }
     }
   }
+
   return { tasks, projects };
+}
+
+async function listProjectCompletedTasks(api: any, projectId: string) {
+  // NOTE: This endpoint isn't documented on the older OpenAPI markdown pages in this repo,
+  // but it exists in production and is required to fetch completed tasks.
+  const data = await didaRequest(api, "GET", `project/${projectId}/task/completed`);
+
+  // Some accounts/projects may return an empty body with 200; our parser converts that to `true`.
+  if (!data || data === true) {
+    return [];
+  }
+
+  // Be defensive: accept either a raw array or an object wrapper.
+  if (Array.isArray(data)) {
+    return data;
+  }
+  if (Array.isArray((data as any).tasks)) {
+    return (data as any).tasks;
+  }
+  return [];
 }
 
 function normalizeTask(task: any, project: any) {
